@@ -3,8 +3,9 @@ import {
   BrowserRouter,
   Routes,
   Route,
-  Navigate
+  useLocation,
 } from "react-router-dom"
+
 import Login from "./pages/Login"
 import Sidebar from "./components/Sidebar"
 
@@ -18,84 +19,133 @@ import Reports from "./pages/Reports"
 import SystemLogs from "./pages/SystemLogs"
 import Settings from "./pages/Settings"
 
-function App() {
+
+function AppLayout() {
+  const location = useLocation()
+
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  return (
-    <BrowserRouter>
-      <div className="min-h-screen bg-[#080808] text-white">
+  // Check if the current page is the login page
+  const isLoginPage = location.pathname === "/login"
 
+  return (
+    <div className="min-h-screen bg-[#080808] text-white">
+
+      {/* ================= SIDEBAR ================= */}
+      {!isLoginPage && (
         <Sidebar
           sidebarOpen={sidebarOpen}
           setSidebarOpen={setSidebarOpen}
         />
+      )}
 
-        <main
-          className={`
-            min-h-screen
-            transition-all
-            duration-300
-            ease-in-out
-            ${sidebarOpen ? "ml-[240px]" : "ml-[68px]"}
-          `}
+      {/* ================= MAIN CONTENT ================= */}
+      <main
+        className={`
+          min-h-screen
+          transition-all
+          duration-300
+          ease-in-out
+
+          ${
+            isLoginPage
+              ? "ml-0"
+              : sidebarOpen
+                ? "ml-[240px]"
+                : "ml-[68px]"
+          }
+        `}
+      >
+
+        {/* Remove padding from login page */}
+        <div
+          className={
+            isLoginPage
+              ? ""
+              : "p-8"
+          }
         >
-          <div className="p-8">
-            <Routes>
 
-              <Route
-                path="/login"
-                element={<Login />}
-              />
+          <Routes>
 
-              <Route path="/" element={<Dashboard />} />
+            {/* ================= LOGIN ================= */}
+            <Route
+              path="/login"
+              element={<Login />}
+            />
 
-              <Route
-                path="/businesses"
-                element={<Businesses />}
-              />
+            {/* ================= DASHBOARD ================= */}
+            <Route
+              path="/"
+              element={<Dashboard />}
+            />
 
-              <Route
-                path="/nfc-cards"
-                element={<NFCCards />}
-              />
+            {/* ================= BUSINESSES ================= */}
+            <Route
+              path="/businesses"
+              element={<Businesses />}
+            />
 
-              <Route
-                path="/transactions"
-                element={<Transactions />}
-              />
+            {/* ================= NFC CARDS ================= */}
+            <Route
+              path="/nfc-cards"
+              element={<NFCCards />}
+            />
 
-              <Route
-                path="/users"
-                element={<Users />}
-              />
+            {/* ================= TRANSACTIONS ================= */}
+            <Route
+              path="/transactions"
+              element={<Transactions />}
+            />
 
-              <Route
-                path="/devices"
-                element={<Devices />}
-              />
+            {/* ================= USERS ================= */}
+            <Route
+              path="/users"
+              element={<Users />}
+            />
 
-              <Route
-                path="/reports"
-                element={<Reports />}
-              />
+            {/* ================= DEVICES ================= */}
+            <Route
+              path="/devices"
+              element={<Devices />}
+            />
 
-              <Route
-                path="/system-logs"
-                element={<SystemLogs />}
-              />
+            {/* ================= REPORTS ================= */}
+            <Route
+              path="/reports"
+              element={<Reports />}
+            />
 
-              <Route
-                path="/settings"
-                element={<Settings />}
-              />
+            {/* ================= SYSTEM LOGS ================= */}
+            <Route
+              path="/system-logs"
+              element={<SystemLogs />}
+            />
 
-            </Routes>
-          </div>
-        </main>
+            {/* ================= SETTINGS ================= */}
+            <Route
+              path="/settings"
+              element={<Settings />}
+            />
 
-      </div>
+          </Routes>
+
+        </div>
+
+      </main>
+
+    </div>
+  )
+}
+
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppLayout />
     </BrowserRouter>
   )
 }
+
 
 export default App
