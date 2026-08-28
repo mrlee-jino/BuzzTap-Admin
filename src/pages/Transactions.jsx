@@ -1,4 +1,8 @@
 import { useState } from "react"
+import Modal from "../components/Modal"
+import Toast from "../components/Toast"
+import DropdownMenu from "../components/DropdownMenu"
+import ConfirmModal from "../components/ConfirmModal"
 
 const transactions = [
   {
@@ -81,10 +85,27 @@ const transactions = [
 ]
 
 function Transactions() {
+  const [records, setRecords] = useState(transactions)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("All")
+  const [methodFilter, setMethodFilter] = useState("All")
+  const [menuId, setMenuId] = useState(null)
+  const [selected, setSelected] = useState(null)
+  const [toast, setToast] = useState("")
+  const [refund, setRefund] = useState(null)
+  const downloadCsv = () => {
+    const headers = ["ID", "Date", "Time", "Business", "Customer", "NFC Card", "Type/Method", "Amount", "Status"]
+    const escapeCsv = (value) => `"${String(value).replaceAll('"', '""')}"`
+    const csv = [headers, ...records.map((item) => [item.id, item.date, item.time, item.business, item.customer, item.card, item.method, item.amount, item.status])].map((row) => row.map(escapeCsv).join(",")).join("\n")
+    const link = document.createElement("a")
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }))
+    link.download = "buzztap-transactions.csv"
+    link.click()
+    setToast("Transactions exported")
+  }
+  const downloadReceipt = (transaction) => { const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([`BuzzTap receipt\n${transaction.id}\nAmount: ₱${transaction.amount}`], { type: "text/plain" })); link.download = `${transaction.id}-receipt.txt`; link.click(); setToast("Receipt downloaded") }
 
-  const filteredTransactions = transactions.filter((transaction) => {
+  const filteredTransactions = records.filter((transaction) => {
     const matchesSearch =
       transaction.id.toLowerCase().includes(search.toLowerCase()) ||
       transaction.business.toLowerCase().includes(search.toLowerCase()) ||
@@ -93,11 +114,12 @@ function Transactions() {
 
     const matchesStatus =
       statusFilter === "All" || transaction.status === statusFilter
+    const matchesMethod = methodFilter === "All" || transaction.method === methodFilter
 
-    return matchesSearch && matchesStatus
+    return matchesSearch && matchesStatus && matchesMethod
   })
 
-  const completedTransactions = transactions.filter(
+  const completedTransactions = records.filter(
     (transaction) => transaction.status === "Completed"
   )
 
@@ -108,7 +130,7 @@ function Transactions() {
 
   const completedCount = completedTransactions.length
 
-  const pendingCount = transactions.filter(
+  const pendingCount = records.filter(
     (transaction) => transaction.status === "Pending"
   ).length
 
@@ -131,7 +153,7 @@ function Transactions() {
           </p>
         </div>
 
-        <button className="rounded-xl bg-yellow-400 px-6 py-3 font-semibold text-black transition hover:bg-yellow-300 hover:shadow-[0_0_25px_rgba(250,204,21,0.25)]">
+        <button onClick={downloadCsv} className="rounded-xl bg-yellow-400 px-6 py-3 font-semibold text-black transition hover:bg-yellow-300 hover:shadow-[0_0_25px_rgba(250,204,21,0.25)]">
           Export Transactions
         </button>
       </div>
@@ -215,6 +237,7 @@ function Transactions() {
                 {status}
               </button>
             ))}
+            {["All", "NFC", "Cash"].map((method) => <button key={method} onClick={() => setMethodFilter(method)} className={`rounded-xl px-4 py-2 text-sm ${methodFilter === method ? "bg-yellow-400 font-semibold text-black" : "bg-[#181818] text-gray-400"}`}>{method}</button>)}
 
           </div>
 
@@ -366,9 +389,10 @@ function Transactions() {
 
                   <td className="px-6 py-5">
 
-                    <button className="text-gray-500 transition hover:text-yellow-400">
+                    <button onClick={() => setMenuId(menuId === transaction.id ? null : transaction.id)} className="text-gray-500 transition hover:text-yellow-400" aria-label={`Actions for ${transaction.id}`}>
                       ⋮
                     </button>
+                    {menuId === transaction.id && <DropdownMenu options={[{ label: "View Details", onClick: () => setSelected(transaction) }, { label: "Download Receipt", onClick: () => downloadReceipt(transaction) }, transaction.status === "Completed" ? { label: "Refund", onClick: () => setRefund(transaction), destructive: true } : null]} onSelect={(option) => { option.onClick(); setMenuId(null) }} />}
 
                   </td>
 
@@ -389,6 +413,10 @@ function Transactions() {
         )}
 
       </div>
+
+      {selected && <Modal title="Transaction Details" onClose={() => setSelected(null)}><div className="space-y-2 text-sm"><p><span className="text-gray-500">ID:</span> {selected.id}</p><p><span className="text-gray-500">Date:</span> {selected.date}</p><p><span className="text-gray-500">Time:</span> {selected.time}</p><p><span className="text-gray-500">Business:</span> {selected.business}</p><p><span className="text-gray-500">Customer:</span> {selected.customer}</p><p><span className="text-gray-500">NFC Card:</span> {selected.card}</p><p><span className="text-gray-500">Type/Method:</span> {selected.method}</p><p><span className="text-gray-500">Amount:</span> ₱{selected.amount.toLocaleString()}</p><p><span className="text-gray-500">Status:</span> {selected.status}</p></div></Modal>}
+      {refund && <ConfirmModal title="Refund transaction?" description={`Refund ₱${refund.amount.toLocaleString()} for ${refund.id}?`} confirmLabel="Refund" destructive onConfirm={() => { setRecords((current) => current.map((item) => item.id === refund.id ? { ...item, status: "Refunded" } : item)); setToast("Transaction refunded successfully."); setRefund(null) }} onClose={() => setRefund(null)} />}
+      {toast && <Toast message={toast} onClose={() => setToast("")} />}
 
     </div>
   )

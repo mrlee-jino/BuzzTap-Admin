@@ -1,7 +1,24 @@
 import { useState } from "react"
+import Toast from "../components/Toast"
+import { useAdminData } from "../context/AdminDataContext"
 
 function Reports() {
+  const { treasury, metrics } = useAdminData()
   const [period, setPeriod] = useState("7 Days")
+  const [generating, setGenerating] = useState(false)
+  const [toast, setToast] = useState("")
+  const multiplier = period === "30 Days" ? 4 : period === "90 Days" ? 12 : period === "This Year" ? 52 : 1
+  const downloadReport = () => {
+    const headers = ["Period", "Day", "Revenue", "BP Issued", "BP In Circulation"]
+    const rows = revenueData.map((item) => [period, item.day, item.amount * multiplier, treasury.issued, metrics.circulation])
+    const csv = [headers, ...rows].map((row) => row.join(",")).join("\n")
+    const link = document.createElement("a")
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }))
+    link.download = "buzztap-report.csv"
+    link.click()
+    setToast("Report downloaded successfully.")
+  }
+  const generateReport = () => { setGenerating(true); window.setTimeout(() => { setGenerating(false); setToast("Report generated successfully.") }, 1000) }
 
   const revenueData = [
     { day: "Mon", amount: 18500 },
@@ -62,6 +79,15 @@ function Reports() {
       <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
 
         <div>
+        <div className="rounded-2xl border border-yellow-400/20 bg-[#111111] p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-bold tracking-[0.2em] text-yellow-400">MOCK TREASURY SNAPSHOT</p>
+              <p className="mt-2 text-sm text-gray-500">Non-financial prototype metrics included in report exports.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-5 text-right text-sm"><span><b className="block text-lg text-white">{treasury.issued.toLocaleString()}</b><small className="text-gray-500">Issued</small></span><span><b className="block text-lg text-white">{metrics.circulation.toLocaleString()}</b><small className="text-gray-500">Circulation</small></span><span><b className="block text-lg text-white">{metrics.available.toLocaleString()}</b><small className="text-gray-500">Available</small></span></div>
+          </div>
+        </div>
 
           <p className="text-sm font-bold tracking-[0.25em] text-yellow-400">
             PLATFORM ANALYTICS
@@ -79,12 +105,12 @@ function Reports() {
 
         <div className="flex gap-3">
 
-          <button className="rounded-xl border border-white/10 bg-[#111111] px-5 py-3 text-sm text-gray-400 transition hover:border-yellow-400/30 hover:text-white">
+          <button onClick={downloadReport} className="rounded-xl border border-white/10 bg-[#111111] px-5 py-3 text-sm text-gray-400 transition hover:border-yellow-400/30 hover:text-white">
             Download Report
           </button>
 
-          <button className="rounded-xl bg-yellow-400 px-5 py-3 text-sm font-semibold text-black transition hover:bg-yellow-300 hover:shadow-[0_0_25px_rgba(250,204,21,0.25)]">
-            Generate Report
+          <button onClick={generateReport} disabled={generating} className="rounded-xl bg-yellow-400 px-5 py-3 text-sm font-semibold text-black transition hover:bg-yellow-300 hover:shadow-[0_0_25px_rgba(250,204,21,0.25)]">
+            {generating ? "Generating..." : "Generate Report"}
           </button>
 
         </div>
@@ -126,7 +152,7 @@ function Reports() {
           </p>
 
           <h2 className="mt-3 text-3xl font-bold">
-            ₱{totalRevenue.toLocaleString()}
+            ₱{(totalRevenue * multiplier).toLocaleString()}
           </h2>
 
           <p className="mt-2 text-xs text-yellow-400">
@@ -187,6 +213,7 @@ function Reports() {
         </div>
 
       </div>
+      {toast && <Toast message={toast} onClose={() => setToast("")} />}
 
 
       {/* Revenue Chart */}

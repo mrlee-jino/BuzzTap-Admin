@@ -1,0 +1,27 @@
+import { useState } from "react"
+import { useAdminData } from "../context/AdminDataContext"
+import Modal from "../components/Modal"
+import ConfirmModal from "../components/ConfirmModal"
+import Toast from "../components/Toast"
+
+const types = ["UPDATE", "EVENT", "PROMOTION", "ADVERTISEMENT"]
+const statuses = ["PENDING", "APPROVED", "REJECTED", "PUBLISHED", "UNPUBLISHED", "ARCHIVED"]
+
+function ContentManagement() {
+  const { contentItems, updateContent } = useAdminData()
+  const [search, setSearch] = useState("")
+  const [type, setType] = useState("All")
+  const [status, setStatus] = useState("All")
+  const [confirm, setConfirm] = useState(null)
+  const [rejectItem, setRejectItem] = useState(null)
+  const [reason, setReason] = useState("")
+  const [toast, setToast] = useState(null)
+  const filtered = contentItems.filter((item) => (type === "All" || item.type === type) && (status === "All" || item.status === status) && `${item.title} ${item.owner} ${item.id}`.toLowerCase().includes(search.toLowerCase()))
+  const ask = (item, nextStatus) => setConfirm({ title: `${nextStatus} content?`, description: `${item.title} will be marked ${nextStatus} in the mock content workflow.`, confirmLabel: nextStatus, destructive: nextStatus === "ARCHIVED", onConfirm: () => { updateContent(item.id, nextStatus); setConfirm(null); setToast({ message: `Content ${nextStatus.toLowerCase()}.` }) } })
+  const approveOrPublish = (item) => ask(item, item.status === "APPROVED" ? "PUBLISHED" : "APPROVED")
+  const reject = () => { if (!reason.trim()) return setToast({ message: "A rejection reason is required.", tone: "error" }); updateContent(rejectItem.id, "REJECTED", reason.trim()); setRejectItem(null); setReason(""); setToast({ message: "Content rejected." }) }
+
+  return <div className="space-y-8"><header><p className="text-sm font-bold tracking-[0.25em] text-yellow-400">MOCK CONTENT WORKFLOW</p><h1 className="mt-2 text-4xl font-bold">Content Management</h1><p className="mt-2 text-gray-500">Review platform content. Publishing is simulated and has no external effect.</p></header><div className="rounded-2xl border border-white/10 bg-[#111111] p-5"><div className="flex flex-col gap-3 lg:flex-row"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search content, owner, ID" className="flex-1 rounded-xl border border-white/10 bg-[#080808] px-4 py-3 text-sm outline-none focus:border-yellow-400"/><select value={type} onChange={(event) => setType(event.target.value)} className="rounded-xl border border-white/10 bg-[#080808] px-3 py-2 text-sm"><option>All</option>{types.map((item) => <option key={item}>{item}</option>)}</select><select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-xl border border-white/10 bg-[#080808] px-3 py-2 text-sm"><option>All</option>{statuses.map((item) => <option key={item}>{item}</option>)}</select></div></div><div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#111111]"><table className="w-full min-w-[800px] text-left text-sm"><thead className="border-b border-white/10 text-xs uppercase tracking-wider text-gray-600"><tr><th className="px-5 py-4">Content</th><th>Type</th><th>Owner</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead><tbody className="divide-y divide-white/5">{filtered.map((item) => <tr key={item.id}><td className="px-5 py-4"><p className="font-semibold">{item.title}</p><p className="mt-1 font-mono text-xs text-gray-600">{item.id}</p></td><td className="text-yellow-400">{item.type}</td><td className="text-gray-400">{item.owner}</td><td><span className="rounded-full bg-white/5 px-2 py-1 text-xs text-gray-300">{item.status}</span></td><td className="text-gray-500">{item.updatedAt}</td><td><div className="flex gap-3"><button onClick={() => setToast({ message: `${item.title} viewed.` })} className="text-xs text-gray-400">View</button>{["PENDING", "UNPUBLISHED"].includes(item.status) && <button onClick={() => approveOrPublish(item)} className="text-xs text-yellow-400">Approve</button>}{item.status !== "REJECTED" && item.status !== "ARCHIVED" && <button onClick={() => { setRejectItem(item); setReason("") }} className="text-xs text-red-400">Reject</button>}{item.status === "PUBLISHED" && <button onClick={() => ask(item, "UNPUBLISHED")} className="text-xs text-gray-400">Unpublish</button>}{item.status !== "ARCHIVED" && <button onClick={() => ask(item, "ARCHIVED")} className="text-xs text-gray-400">Archive</button>}</div></td></tr>)}</tbody></table>{filtered.length === 0 && <p className="py-12 text-center text-sm text-gray-500">No content found.</p>}</div>{rejectItem && <Modal title="Reject Content" onClose={() => setRejectItem(null)}><label className="text-sm text-gray-400">Reason<textarea rows="4" value={reason} onChange={(event) => setReason(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-[#080808] p-3 text-sm text-white outline-none focus:border-yellow-400" placeholder="Explain why this item is rejected."/></label><div className="mt-6 flex justify-end gap-3"><button onClick={() => setRejectItem(null)} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-gray-300">Cancel</button><button onClick={reject} className="rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white">Reject</button></div></Modal>}{confirm && <ConfirmModal {...confirm} onClose={() => setConfirm(null)}/>} {toast && <Toast {...toast} onClose={() => setToast(null)}/>}</div>
+}
+
+export default ContentManagement

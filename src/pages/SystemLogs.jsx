@@ -1,6 +1,7 @@
 import { useState } from "react"
+import { useAdminData } from "../context/AdminDataContext"
 
-const logs = [
+const legacyLogs = [
   {
     id: "LOG-001",
     time: "10:42 PM",
@@ -114,10 +115,12 @@ const logs = [
 ]
 
 function SystemLogs() {
+  const { auditLogs } = useAdminData()
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState("All")
   const [statusFilter, setStatusFilter] = useState("All")
 
+  const logs = [...auditLogs, ...legacyLogs]
   const filteredLogs = logs.filter((log) => {
     const matchesSearch =
       log.id.toLowerCase().includes(search.toLowerCase()) ||

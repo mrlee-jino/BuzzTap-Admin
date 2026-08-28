@@ -1,6 +1,7 @@
 import { useState } from "react"
 import {
   BrowserRouter,
+  Navigate,
   Routes,
   Route,
   useLocation,
@@ -18,6 +19,16 @@ import Devices from "./pages/Devices"
 import Reports from "./pages/Reports"
 import SystemLogs from "./pages/SystemLogs"
 import Settings from "./pages/Settings"
+import BuzzPointTreasury from "./pages/BuzzPointTreasury"
+import Customers from "./pages/Customers"
+import ContentManagement from "./pages/ContentManagement"
+import { AdminDataProvider } from "./context/AdminDataContext"
+
+function ProtectedRoute({ children }) {
+  const isLoggedIn = sessionStorage.getItem("buzzTapAdminLoggedIn") === "true"
+
+  return isLoggedIn ? children : <Navigate to="/login" replace />
+}
 
 
 function AppLayout() {
@@ -77,56 +88,60 @@ function AppLayout() {
             {/* ================= DASHBOARD ================= */}
             <Route
               path="/"
-              element={<Dashboard />}
+              element={<ProtectedRoute><Dashboard /></ProtectedRoute>}
             />
 
             {/* ================= BUSINESSES ================= */}
             <Route
               path="/businesses"
-              element={<Businesses />}
+              element={<ProtectedRoute><Businesses /></ProtectedRoute>}
             />
 
             {/* ================= NFC CARDS ================= */}
             <Route
               path="/nfc-cards"
-              element={<NFCCards />}
+              element={<ProtectedRoute><NFCCards /></ProtectedRoute>}
             />
 
             {/* ================= TRANSACTIONS ================= */}
             <Route
               path="/transactions"
-              element={<Transactions />}
+              element={<ProtectedRoute><Transactions /></ProtectedRoute>}
             />
 
             {/* ================= USERS ================= */}
             <Route
               path="/users"
-              element={<Users />}
+              element={<ProtectedRoute><Users /></ProtectedRoute>}
             />
 
             {/* ================= DEVICES ================= */}
             <Route
               path="/devices"
-              element={<Devices />}
+              element={<ProtectedRoute><Devices /></ProtectedRoute>}
             />
 
             {/* ================= REPORTS ================= */}
             <Route
               path="/reports"
-              element={<Reports />}
+              element={<ProtectedRoute><Reports /></ProtectedRoute>}
             />
 
             {/* ================= SYSTEM LOGS ================= */}
             <Route
               path="/system-logs"
-              element={<SystemLogs />}
+              element={<ProtectedRoute><SystemLogs /></ProtectedRoute>}
             />
 
             {/* ================= SETTINGS ================= */}
             <Route
               path="/settings"
-              element={<Settings />}
+              element={<ProtectedRoute><Settings /></ProtectedRoute>}
             />
+
+            <Route path="/treasury" element={<ProtectedRoute><BuzzPointTreasury /></ProtectedRoute>} />
+            <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
+            <Route path="/content" element={<ProtectedRoute><ContentManagement /></ProtectedRoute>} />
 
           </Routes>
 
@@ -141,9 +156,11 @@ function AppLayout() {
 
 function App() {
   return (
-    <BrowserRouter>
-      <AppLayout />
-    </BrowserRouter>
+    <AdminDataProvider>
+      <BrowserRouter>
+        <AppLayout />
+      </BrowserRouter>
+    </AdminDataProvider>
   )
 }
 

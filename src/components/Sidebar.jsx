@@ -17,10 +17,13 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
     { name: "Reports", path: "/reports" },
     { name: "System Logs", path: "/system-logs" },
     { name: "Settings", path: "/settings" },
+    { name: "BuzzPoint Treasury", path: "/treasury" },
+    { name: "Customers", path: "/customers" },
+    { name: "Content Management", path: "/content" },
   ]
 
   const handleLogout = () => {
-    localStorage.removeItem("buzzTapAdminLoggedIn")
+    sessionStorage.removeItem("buzzTapAdminLoggedIn")
 
     setShowLogoutConfirm(false)
     setSidebarOpen(false)
@@ -231,6 +234,9 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
                   {item.name === "Reports" && "◫"}
                   {item.name === "System Logs" && "≡"}
                   {item.name === "Settings" && "⚙"}
+                  {item.name === "BuzzPoint Treasury" && "₿"}
+                  {item.name === "Customers" && "♙"}
+                  {item.name === "Content Management" && "▤"}
                 </div>
 
                 {/* Navigation Text */}

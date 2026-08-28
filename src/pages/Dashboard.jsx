@@ -1,4 +1,12 @@
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import Modal from "../components/Modal"
+import { useAdminData } from "../context/AdminDataContext"
+
 function Dashboard() {
+  const navigate = useNavigate()
+  const { treasury, metrics } = useAdminData()
+  const [activity, setActivity] = useState(null)
   const stats = [
     {
       title: "Registered Businesses",
@@ -91,6 +99,13 @@ function Dashboard() {
 
       </div>
 
+      <button type="button" onClick={() => navigate("/treasury")} className="w-full rounded-2xl border border-yellow-400/20 bg-[#111111] p-5 text-left transition hover:border-yellow-400/50">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div><p className="text-xs font-bold tracking-[0.2em] text-yellow-400">MOCK TREASURY</p><h2 className="mt-2 text-lg font-semibold">BuzzPoint supply snapshot</h2><p className="mt-1 text-sm text-gray-500">Prototype-only balances and reconciliation controls.</p></div>
+          <div className="grid grid-cols-3 gap-5 text-right text-sm"><span><b className="block text-lg">{treasury.issued.toLocaleString()}</b><small className="text-gray-500">Issued</small></span><span><b className="block text-lg">{metrics.available.toLocaleString()}</b><small className="text-gray-500">Available</small></span><span><b className="block text-lg text-yellow-400">{metrics.circulation.toLocaleString()}</b><small className="text-gray-500">Circulation</small></span></div>
+        </div>
+      </button>
+
       {/* Main Content */}
       <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-3">
 
@@ -109,7 +124,7 @@ function Dashboard() {
               </p>
             </div>
 
-            <button className="rounded-lg border border-yellow-400/30 px-4 py-2 text-sm text-yellow-400 transition hover:bg-yellow-400 hover:text-black">
+            <button onClick={() => navigate("/businesses")} className="rounded-lg border border-yellow-400/30 px-4 py-2 text-sm text-yellow-400 transition hover:bg-yellow-400 hover:text-black">
               View All
             </button>
 
@@ -119,7 +134,7 @@ function Dashboard() {
 
             {recentBusinesses.map((business) => (
 
-              <div
+              <button type="button" onClick={() => navigate("/businesses")}
                 key={business.name}
                 className="flex items-center justify-between p-5 transition hover:bg-white/[0.02]"
               >
@@ -152,7 +167,7 @@ function Dashboard() {
 
                 </div>
 
-              </div>
+              </button>
 
             ))}
 
@@ -226,6 +241,7 @@ function Dashboard() {
         </div>
 
       </div>
+      {activity && <Modal title="Business Activity" onClose={() => setActivity(null)}><p className="text-lg font-semibold">{activity.name}</p><p className="mt-2 text-gray-400">{activity.type} · {activity.status} · registered {activity.date}</p></Modal>}
 
       {/* Bottom Activity */}
       <div className="mt-6 rounded-2xl border border-white/10 bg-[#111111] p-6">

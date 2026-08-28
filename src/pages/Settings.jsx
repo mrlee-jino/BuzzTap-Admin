@@ -1,4 +1,16 @@
+import { useState } from "react"
+import Modal from "../components/Modal"
+import Toast from "../components/Toast"
+import ConfirmModal from "../components/ConfirmModal"
+
 function Settings() {
+  const [toggles, setToggles] = useState({ nfc: true, payment: true, updates: true })
+  const [security, setSecurity] = useState(false)
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
+  const [maintenanceEnabled, setMaintenanceEnabled] = useState(false)
+  const [maintenance, setMaintenance] = useState(false)
+  const [toast, setToast] = useState("")
+  const toggle = (key, service) => setToggles((current) => { const enabled = !current[key]; setToast(`${service} ${enabled ? "enabled" : "disabled"}.`); return { ...current, [key]: enabled } })
   return (
     <div className="space-y-8">
 
@@ -60,7 +72,7 @@ function Settings() {
           </div>
 
 
-          <button className="rounded-xl bg-yellow-400 px-5 py-3 text-sm font-semibold text-black transition hover:bg-yellow-300 hover:shadow-lg hover:shadow-yellow-400/10">
+          <button onClick={() => setToast("Changes saved")} className="rounded-xl bg-yellow-400 px-5 py-3 text-sm font-semibold text-black transition hover:bg-yellow-300 hover:shadow-lg hover:shadow-yellow-400/10">
             Save Changes
           </button>
 
@@ -98,8 +110,8 @@ function Settings() {
               </p>
             </div>
 
-            <button className="relative h-6 w-11 rounded-full bg-yellow-400">
-              <span className="absolute right-1 top-1 h-4 w-4 rounded-full bg-black" />
+            <button onClick={() => toggle("nfc", "NFC Card Service")} className={`relative h-6 w-11 rounded-full ${toggles.nfc ? "bg-yellow-400" : "bg-gray-700"}`} aria-label="Toggle NFC service">
+              <span className={`absolute top-1 h-4 w-4 rounded-full bg-black ${toggles.nfc ? "right-1" : "left-1"}`} />
             </button>
 
           </div>
@@ -118,8 +130,8 @@ function Settings() {
               </p>
             </div>
 
-            <button className="relative h-6 w-11 rounded-full bg-yellow-400">
-              <span className="absolute right-1 top-1 h-4 w-4 rounded-full bg-black" />
+            <button onClick={() => toggle("payment", "Payment Service")} className={`relative h-6 w-11 rounded-full ${toggles.payment ? "bg-yellow-400" : "bg-gray-700"}`} aria-label="Toggle payment service">
+              <span className={`absolute top-1 h-4 w-4 rounded-full bg-black ${toggles.payment ? "right-1" : "left-1"}`} />
             </button>
 
           </div>
@@ -138,8 +150,8 @@ function Settings() {
               </p>
             </div>
 
-            <button className="relative h-6 w-11 rounded-full bg-yellow-400">
-              <span className="absolute right-1 top-1 h-4 w-4 rounded-full bg-black" />
+            <button onClick={() => toggle("updates", "Automatic System Updates")} className={`relative h-6 w-11 rounded-full ${toggles.updates ? "bg-yellow-400" : "bg-gray-700"}`} aria-label="Toggle automatic updates">
+              <span className={`absolute top-1 h-4 w-4 rounded-full bg-black ${toggles.updates ? "right-1" : "left-1"}`} />
             </button>
 
           </div>
@@ -179,14 +191,14 @@ function Settings() {
               </p>
             </div>
 
-            <span className="rounded-full bg-orange-400/10 px-3 py-1 text-xs font-medium text-orange-400">
-              Not Enabled
+            <span className={`rounded-full px-3 py-1 text-xs font-medium ${twoFactorEnabled ? "bg-yellow-400/10 text-yellow-400" : "bg-orange-400/10 text-orange-400"}`}>
+              {twoFactorEnabled ? "Enabled" : "Not Enabled"}
             </span>
 
           </div>
 
 
-          <button className="rounded-xl border border-white/10 px-5 py-3 text-sm font-medium text-gray-300 transition hover:border-yellow-400/30 hover:text-yellow-400">
+          <button onClick={() => setSecurity(true)} className="rounded-xl border border-white/10 px-5 py-3 text-sm font-medium text-gray-300 transition hover:border-yellow-400/30 hover:text-yellow-400">
             Configure Security
           </button>
 
@@ -223,14 +235,17 @@ function Settings() {
             </p>
           </div>
 
-          <button className="rounded-xl border border-red-400/20 px-5 py-3 text-sm font-medium text-red-400 transition hover:bg-red-400/10">
-            Enable Maintenance
+          <button onClick={() => setMaintenance(true)} className="rounded-xl border border-red-400/20 px-5 py-3 text-sm font-medium text-red-400 transition hover:bg-red-400/10">
+            {maintenanceEnabled ? "Disable Maintenance" : "Enable Maintenance"}
           </button>
 
         </div>
 
       </div>
 
+      {security && <Modal title="Configure Security" onClose={() => setSecurity(false)}><p className="text-sm text-gray-400">Scan the QR code in your authenticator app to enable administrator 2FA.</p><button onClick={() => { setTwoFactorEnabled(true); setSecurity(false); setToast("Two-factor authentication enabled") }} className="mt-6 rounded-xl bg-yellow-400 px-5 py-3 font-semibold text-black">Enable 2FA</button></Modal>}
+      {maintenance && <ConfirmModal title={`${maintenanceEnabled ? "Disable" : "Enable"} maintenance mode?`} description={maintenanceEnabled ? "This will restore access to the BuzzTap platform." : "This will temporarily disable access for platform users."} confirmLabel={maintenanceEnabled ? "Disable Maintenance" : "Enable Maintenance"} destructive={!maintenanceEnabled} onConfirm={() => { const enabled = !maintenanceEnabled; setMaintenanceEnabled(enabled); setMaintenance(false); setToast(`Maintenance mode ${enabled ? "enabled" : "disabled"}`) }} onClose={() => setMaintenance(false)} />}
+      {toast && <Toast message={toast} onClose={() => setToast("")} />}
     </div>
   )
 }

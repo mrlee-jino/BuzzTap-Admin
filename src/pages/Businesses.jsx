@@ -1,9 +1,15 @@
-function Businesses() {
-  const businesses = [
+import { useState } from "react"
+import Modal from "../components/Modal"
+import Toast from "../components/Toast"
+import DropdownMenu from "../components/DropdownMenu"
+import ConfirmModal from "../components/ConfirmModal"
+
+const initialBusinesses = [
     {
       name: "CyberHub Gaming Station",
       location: "Cabadbaran City",
       type: "Working Station",
+      owner: "Juan Dela Cruz",
       stations: 24,
       status: "Active",
       joined: "Aug 23, 2026",
@@ -12,6 +18,7 @@ function Businesses() {
       name: "Bean & Byte Cafe",
       location: "Butuan City",
       type: "Cafe",
+      owner: "Maria Santos",
       stations: 12,
       status: "Active",
       joined: "Aug 22, 2026",
@@ -20,6 +27,7 @@ function Businesses() {
       name: "NextLevel Computer Shop",
       location: "Surigao City",
       type: "Computer Shop",
+      owner: "Alex Reyes",
       stations: 18,
       status: "Pending",
       joined: "Aug 21, 2026",
@@ -28,6 +36,7 @@ function Businesses() {
       name: "Pixel Point",
       location: "Cagayan de Oro",
       type: "Computer Shop",
+      owner: "Carlo Santos",
       stations: 30,
       status: "Active",
       joined: "Aug 20, 2026",
@@ -36,6 +45,7 @@ function Businesses() {
       name: "ByteZone Work Hub",
       location: "Butuan City",
       type: "Working Station",
+      owner: "Mark Villanueva",
       stations: 20,
       status: "Active",
       joined: "Aug 18, 2026",
@@ -44,28 +54,58 @@ function Businesses() {
       name: "Cafe Connect",
       location: "Cabadbaran City",
       type: "Cafe",
+      owner: "Angela Cruz",
       stations: 8,
       status: "Suspended",
       joined: "Aug 15, 2026",
     },
+]
+
+function Businesses() {
+  const [businesses, setBusinesses] = useState(initialBusinesses)
+  const [filter, setFilter] = useState("All")
+  const [search, setSearch] = useState("")
+  const [modal, setModal] = useState(null)
+  const [form, setForm] = useState({ name: "", location: "", type: "Cafe", owner: "", email: "", phone: "", stations: "", status: "Pending" })
+  const [error, setError] = useState("")
+  const [toast, setToast] = useState("")
+  const [confirm, setConfirm] = useState(null)
+
+  const filteredBusinesses = businesses.filter((business) => {
+    const query = search.toLowerCase()
+    return (filter === "All" || business.status === filter) && [business.name, business.location, business.type, business.owner].some((value) => value.toLowerCase().includes(query))
+  })
+  const openAdd = () => { setForm({ name: "", location: "", type: "Cafe", owner: "", email: "", phone: "", stations: "", status: "Pending" }); setError(""); setModal("add") }
+  const saveBusiness = (event) => {
+    event.preventDefault()
+    if (!form.name.trim() || !form.location.trim() || !form.owner.trim() || !form.stations || Number(form.stations) < 1) { setError("Name, location, owner, and a positive station count are required."); return }
+    const business = { ...form, stations: Number(form.stations), joined: "Today" }
+    setBusinesses((current) => modal === "edit" ? current.map((item) => item.name === form.originalName ? { ...item, ...business, status: item.status } : item) : [business, ...current])
+    setModal(null); setToast(modal === "edit" ? "Business updated" : "Business added successfully.")
+  }
+  const changeStatus = () => { setBusinesses((current) => current.map((item) => item.name === confirm.business.name ? { ...item, status: confirm.status } : item)); setToast(`Business ${confirm.status.toLowerCase()}`); setConfirm(null) }
+  const actionOptions = (business) => [
+    { label: "View Details", onClick: () => setModal(business.name) },
+    { label: "Edit", onClick: () => { setForm({ ...business, originalName: business.name }); setModal("edit") } },
+    business.status === "Suspended" ? { label: "Activate", onClick: () => setConfirm({ business, status: "Active" }) } : { label: "Suspend", onClick: () => setConfirm({ business, status: "Suspended" }), destructive: true },
   ]
 
   const stats = [
     {
       title: "Total Businesses",
-      value: "24",
+      value: businesses.length,
     },
     {
       title: "Active",
-      value: "21",
+      value: businesses.filter((business) => business.status === "Active").length,
     },
     {
       title: "Pending",
-      value: "2",
+      value: businesses.filter((business) => business.status === "Pending").length,
     },
     {
       title: "Suspended",
-      value: "1",
+      value: businesses.filter((business) => business.status === "Suspended").length,
     },
   ]
 
@@ -89,7 +129,7 @@ function Businesses() {
           </p>
         </div>
 
-        <button className="rounded-xl bg-yellow-400 px-5 py-3 font-semibold text-black transition duration-300 hover:-translate-y-0.5 hover:bg-yellow-300 hover:shadow-[0_0_25px_rgba(250,204,21,0.2)]">
+          <button onClick={openAdd} className="rounded-xl bg-yellow-400 px-5 py-3 font-semibold text-black transition duration-300 hover:-translate-y-0.5 hover:bg-yellow-300 hover:shadow-[0_0_25px_rgba(250,204,21,0.2)]">
           + Add Business
         </button>
 
@@ -127,26 +167,14 @@ function Businesses() {
           <input
             type="text"
             placeholder="Search businesses..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
             className="w-full rounded-xl border border-white/10 bg-[#080808] px-4 py-3 text-sm text-white outline-none placeholder:text-gray-600 transition focus:border-yellow-400/50 lg:max-w-md"
           />
 
           <div className="flex gap-2 overflow-x-auto">
 
-            <button className="whitespace-nowrap rounded-lg bg-yellow-400 px-4 py-2 text-sm font-medium text-black">
-              All
-            </button>
-
-            <button className="whitespace-nowrap rounded-lg bg-[#181818] px-4 py-2 text-sm text-gray-400 transition hover:bg-[#222222] hover:text-white">
-              Active
-            </button>
-
-            <button className="whitespace-nowrap rounded-lg bg-[#181818] px-4 py-2 text-sm text-gray-400 transition hover:bg-[#222222] hover:text-white">
-              Pending
-            </button>
-
-            <button className="whitespace-nowrap rounded-lg bg-[#181818] px-4 py-2 text-sm text-gray-400 transition hover:bg-[#222222] hover:text-white">
-              Suspended
-            </button>
+            {["All", "Active", "Pending", "Suspended"].map((item) => <button key={item} onClick={() => setFilter(item)} className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm ${filter === item ? "bg-yellow-400 font-medium text-black" : "bg-[#181818] text-gray-400 hover:bg-[#222222] hover:text-white"}`}>{item}</button>)}
 
           </div>
 
@@ -174,7 +202,7 @@ function Businesses() {
         {/* Businesses */}
         <div className="divide-y divide-white/5">
 
-          {businesses.map((business) => (
+          {filteredBusinesses.map((business) => (
 
             <div
               key={business.name}
@@ -262,9 +290,9 @@ function Businesses() {
               {/* Action */}
               <div className="flex justify-start md:justify-end">
 
-                <button className="rounded-lg px-3 py-2 text-gray-500 transition hover:bg-white/5 hover:text-yellow-400">
+                <div className="relative"><button onClick={() => setModal(modal === business.name ? null : business.name)} className="rounded-lg px-3 py-2 text-gray-500 transition hover:bg-white/5 hover:text-yellow-400" aria-label={`Actions for ${business.name}`}>
                   ⋮
-                </button>
+                </button>{modal === business.name && <DropdownMenu options={actionOptions(business)} onSelect={(option) => { option.onClick(); if (option.label !== "View Details") setModal(null) }} />}</div>
 
               </div>
 
@@ -273,8 +301,14 @@ function Businesses() {
           ))}
 
         </div>
+        {filteredBusinesses.length === 0 && <div className="px-6 py-12 text-center text-gray-500">No businesses found.</div>}
 
       </div>
+
+      {(modal === "add" || modal === "edit") && <Modal title={modal === "add" ? "Add Business" : "Edit Business"} onClose={() => setModal(null)}><form onSubmit={saveBusiness} className="space-y-4"><input required placeholder="Business name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="field" /><input required placeholder="Location" value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} className="field" /><input required placeholder="Owner" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} className="field" /><input required type="email" placeholder="Email" value={form.email || ""} onChange={(event) => setForm({ ...form, email: event.target.value })} className="field" /><input required placeholder="Phone" value={form.phone || ""} onChange={(event) => setForm({ ...form, phone: event.target.value })} className="field" /><select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })} className="field"><option>Cafe</option><option>Computer Shop</option><option>Working Station</option></select><input required min="1" type="number" placeholder="Stations" value={form.stations} onChange={(event) => setForm({ ...form, stations: event.target.value })} className="field" /><select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} className="field"><option>Active</option><option>Pending</option><option>Suspended</option></select>{error && <p className="text-sm text-red-400">{error}</p>}<div className="flex justify-end gap-3"><button type="button" onClick={() => setModal(null)} className="rounded-xl border border-white/10 px-5 py-3 text-sm text-gray-300">Cancel</button><button className="rounded-xl bg-yellow-400 px-5 py-3 font-semibold text-black">{modal === "add" ? "Add Business" : "Save Business"}</button></div></form></Modal>}
+      {modal && !["add", "edit"].includes(modal) && <Modal title="Business Details" onClose={() => setModal(null)}><p className="text-lg font-semibold">{businesses.find((item) => item.name === modal)?.name}</p><p className="mt-2 text-gray-400">{businesses.find((item) => item.name === modal)?.owner} · {businesses.find((item) => item.name === modal)?.location}</p></Modal>}
+      {confirm && <ConfirmModal title={`${confirm.status} business?`} description={`This will change ${confirm.business.name} to ${confirm.status}.`} confirmLabel={confirm.status} destructive={confirm.status === "Suspended"} onConfirm={changeStatus} onClose={() => setConfirm(null)} />}
+      {toast && <Toast message={toast} onClose={() => setToast("")} />}
 
     </div>
   )

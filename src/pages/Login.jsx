@@ -26,7 +26,7 @@ function Login() {
     setTimeout(() => {
       if (username === "admin" && password === "buzztap123") {
 
-        localStorage.setItem(
+        sessionStorage.setItem(
           "buzzTapAdminLoggedIn",
           "true"
         )

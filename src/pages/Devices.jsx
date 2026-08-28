@@ -1,4 +1,8 @@
 import { useState } from "react"
+import Modal from "../components/Modal"
+import Toast from "../components/Toast"
+import DropdownMenu from "../components/DropdownMenu"
+import ConfirmModal from "../components/ConfirmModal"
 
 const devices = [
   {
@@ -84,10 +88,16 @@ const devices = [
 ]
 
 function Devices() {
+  const [records, setRecords] = useState(devices)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("All")
+  const [modal, setModal] = useState(null)
+  const [toast, setToast] = useState("")
+  const [confirm, setConfirm] = useState(null)
+  const [restartingId, setRestartingId] = useState(null)
+  const [form, setForm] = useState({ name: "", id: "", business: "", type: "NFC Reader", location: "", firmware: "", status: "Online" })
 
-  const filteredDevices = devices.filter((device) => {
+  const filteredDevices = records.filter((device) => {
     const matchesSearch =
       device.id.toLowerCase().includes(search.toLowerCase()) ||
       device.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -100,17 +110,33 @@ function Devices() {
     return matchesSearch && matchesStatus
   })
 
-  const onlineDevices = devices.filter(
+  const onlineDevices = records.filter(
     (device) => device.status === "Online"
   ).length
 
-  const offlineDevices = devices.filter(
+  const offlineDevices = records.filter(
     (device) => device.status === "Offline"
   ).length
 
-  const maintenanceDevices = devices.filter(
+  const maintenanceDevices = records.filter(
     (device) => device.status === "Maintenance"
   ).length
+
+  const restartDevice = (device) => {
+    setRestartingId(device.id)
+    window.setTimeout(() => {
+      setRecords((current) => current.map((item) => item.id === device.id ? { ...item, status: "Online", heartbeat: "Just now" } : item))
+      setRestartingId(null)
+      setToast("Device restarted successfully.")
+    }, 700)
+  }
+
+  const registerDevice = (event) => {
+    event.preventDefault()
+    setRecords((current) => [{ ...form, heartbeat: "Just now" }, ...current])
+    setModal(null)
+    setToast("Device registered successfully.")
+  }
 
   return (
     <div className="space-y-8">
@@ -135,7 +161,7 @@ function Devices() {
 
         </div>
 
-        <button className="rounded-xl bg-yellow-400 px-6 py-3 font-semibold text-black transition hover:bg-yellow-300 hover:shadow-[0_0_25px_rgba(250,204,21,0.25)]">
+        <button onClick={() => setModal("register")} className="rounded-xl bg-yellow-400 px-6 py-3 font-semibold text-black transition hover:bg-yellow-300 hover:shadow-[0_0_25px_rgba(250,204,21,0.25)]">
           + Register Device
         </button>
 
@@ -426,9 +452,10 @@ function Devices() {
 
                   <td className="px-6 py-5">
 
-                    <button className="text-xl text-gray-500 transition hover:text-yellow-400">
+                    <button onClick={() => setModal({ type: "menu", device })} className="text-xl text-gray-500 transition hover:text-yellow-400" aria-label={`Actions for ${device.name}`}>
                       ⋮
                     </button>
+                    {modal?.type === "menu" && modal.device.id === device.id && <DropdownMenu options={[{ label: "View Details", onClick: () => setModal({ type: "details", device }) }, { label: "Edit", onClick: () => setToast("Device edit opened") }, { label: restartingId === device.id ? "Restarting..." : "Restart", onClick: () => restartDevice(device) }, { label: "Maintenance", onClick: () => setConfirm({ device, status: "Maintenance" }) }, { label: "Remove", onClick: () => setConfirm({ device, status: "Removed" }), destructive: true }]} onSelect={(option) => { option.onClick(); if (option.label !== "View Details") setModal(null) }} />}
 
                   </td>
 
@@ -458,6 +485,10 @@ function Devices() {
         )}
 
       </div>
+
+      {modal === "register" && <Modal title="Register Device" onClose={() => setModal(null)}><form onSubmit={registerDevice} className="space-y-4"><input required placeholder="Device Name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="field" /><input required placeholder="Device ID" value={form.id} onChange={(event) => setForm({ ...form, id: event.target.value })} className="field" /><input required placeholder="Business" value={form.business} onChange={(event) => setForm({ ...form, business: event.target.value })} className="field" /><select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })} className="field"><option>NFC Reader</option><option>Power Controller</option><option>Receipt Printer</option></select><input required placeholder="Location" value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} className="field" /><input required placeholder="Firmware Version" value={form.firmware} onChange={(event) => setForm({ ...form, firmware: event.target.value })} className="field" /><select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} className="field"><option>Online</option><option>Offline</option><option>Maintenance</option></select><div className="flex justify-end gap-3"><button type="button" onClick={() => setModal(null)} className="rounded-xl border border-white/10 px-5 py-3 text-sm text-gray-300">Cancel</button><button className="rounded-xl bg-yellow-400 px-5 py-3 font-semibold text-black">Register Device</button></div></form></Modal>}
+      {modal?.type === "details" && <Modal title="Device Details" onClose={() => setModal(null)}><p className="text-lg font-semibold">{modal.device.name}</p><p className="mt-2 text-gray-400">{modal.device.business} · {modal.device.status}</p></Modal>}
+      {confirm && <ConfirmModal title={`${confirm.status === "Removed" ? "Remove" : "Schedule maintenance for"} device?`} description={`${confirm.device.name} will be marked ${confirm.status}.`} confirmLabel={confirm.status} destructive={confirm.status === "Removed"} onConfirm={() => { setRecords((current) => confirm.status === "Removed" ? current.filter((item) => item.id !== confirm.device.id) : current.map((item) => item.id === confirm.device.id ? { ...item, status: confirm.status } : item)); setConfirm(null); setToast(`Device ${confirm.status.toLowerCase()}`) }} onClose={() => setConfirm(null)} />}{toast && <Toast message={toast} onClose={() => setToast("")} />}
 
     </div>
   )
