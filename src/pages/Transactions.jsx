@@ -1,91 +1,49 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { supabase } from "../lib/supabaseClient"
 import Modal from "../components/Modal"
 import Toast from "../components/Toast"
 import DropdownMenu from "../components/DropdownMenu"
 import ConfirmModal from "../components/ConfirmModal"
 
-const transactions = [
-  {
-    id: "TXN-001284",
-    business: "CyberHub Gaming Station",
-    customer: "Juan Dela Cruz",
-    card: "BT-001",
-    amount: 350,
-    date: "Aug 23, 2026",
-    time: "4:21 PM",
-    method: "NFC",
-    status: "Completed",
-  },
-  {
-    id: "TXN-001283",
-    business: "Bean & Byte Cafe",
-    customer: "Maria Santos",
-    card: "BT-002",
-    amount: 185,
-    date: "Aug 23, 2026",
-    time: "4:05 PM",
-    method: "NFC",
-    status: "Completed",
-  },
-  {
-    id: "TXN-001282",
-    business: "NextLevel Computer Shop",
-    customer: "Alex Reyes",
-    card: "BT-003",
-    amount: 580,
-    date: "Aug 23, 2026",
-    time: "3:48 PM",
-    method: "NFC",
-    status: "Completed",
-  },
-  {
-    id: "TXN-001281",
-    business: "Pixel Point",
-    customer: "Carlo Santos",
-    card: "BT-004",
-    amount: 120,
-    date: "Aug 23, 2026",
-    time: "3:21 PM",
-    method: "NFC",
-    status: "Pending",
-  },
-  {
-    id: "TXN-001280",
-    business: "CyberHub Gaming Station",
-    customer: "Angela Cruz",
-    card: "BT-005",
-    amount: 250,
-    date: "Aug 23, 2026",
-    time: "2:55 PM",
-    method: "NFC",
-    status: "Completed",
-  },
-  {
-    id: "TXN-001279",
-    business: "Bean & Byte Cafe",
-    customer: "Mark Villanueva",
-    card: "BT-006",
-    amount: 95,
-    date: "Aug 23, 2026",
-    time: "2:31 PM",
-    method: "NFC",
-    status: "Failed",
-  },
-  {
-    id: "TXN-001278",
-    business: "Pixel Point",
-    customer: "Lee Tejones",
-    card: "BT-000",
-    amount: 500,
-    date: "Aug 23, 2026",
-    time: "1:45 PM",
-    method: "NFC",
-    status: "Completed",
-  },
-]
+const normalizeTransactionStatus = (status) => {
+  switch (String(status || "").toUpperCase()) {
+    case "PENDING":
+      return "Pending"
+    case "PROCESSING":
+      return "Processing"
+    case "COMPLETED":
+      return "Completed"
+    case "FAILED":
+      return "Failed"
+    case "CANCELLED":
+      return "Cancelled"
+    case "REFUNDED":
+      return "Refunded"
+    case "VOIDED":
+      return "Voided"
+    default:
+      return "Pending"
+  }
+}
+
+const formatDateTime = (value) => {
+  const date = value ? new Date(value) : new Date()
+
+  return {
+    date: new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(date),
+    time: new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date),
+  }
+}
 
 function Transactions() {
-  const [records, setRecords] = useState(transactions)
+  const [records, setRecords] = useState([])
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("All")
   const [methodFilter, setMethodFilter] = useState("All")
@@ -93,46 +51,163 @@ function Transactions() {
   const [selected, setSelected] = useState(null)
   const [toast, setToast] = useState("")
   const [refund, setRefund] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState("")
+
+  const loadTransactions = async () => {
+    setLoading(true)
+    setFetchError("")
+
+    try {
+      const { data, error } = await supabase
+        .from("transactions")
+        .select(`
+          id,
+          transaction_code,
+          customer_id,
+          business_id,
+          nfc_card_id,
+          transaction_type,
+          status,
+          amount_bp,
+          description,
+          created_at,
+          updated_at,
+          completed_at,
+          customer:profiles!transactions_customer_id_fkey(
+            id,
+            first_name,
+            last_name
+          ),
+          business:businesses!transactions_business_id_fkey(
+            id,
+            name
+          ),
+          nfc_card:nfc_cards!transactions_nfc_card_id_fkey(
+            id,
+            card_code
+          )
+        `)
+        .order("created_at", { ascending: false })
+
+      if (error) {
+        throw error
+      }
+
+      const normalizedTransactions = (data || []).map((transaction) => {
+        const customerName = [transaction.customer?.first_name, transaction.customer?.last_name]
+          .filter(Boolean)
+          .join(" ") || "Unknown Customer"
+        const businessName = transaction.business?.name || "Unknown Business"
+        const cardCode = transaction.nfc_card?.card_code || "—"
+        const dateTime = formatDateTime(transaction.created_at)
+
+        return {
+          id: transaction.transaction_code || transaction.id,
+          business: businessName,
+          customer: customerName,
+          card: cardCode,
+          amount: Number(transaction.amount_bp || 0),
+          date: dateTime.date,
+          time: dateTime.time,
+          method: transaction.nfc_card_id ? "NFC" : "—",
+          status: normalizeTransactionStatus(transaction.status),
+          type: transaction.transaction_type || "—",
+          description: transaction.description || "",
+          createdAt: transaction.created_at,
+        }
+      })
+
+      setRecords(normalizedTransactions)
+    } catch (error) {
+      console.error("Unable to load transactions from Supabase.", error)
+      setRecords([])
+      setFetchError("Unable to load transactions from Supabase.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadTransactions()
+  }, [])
+
   const downloadCsv = () => {
-    const headers = ["ID", "Date", "Time", "Business", "Customer", "NFC Card", "Type/Method", "Amount", "Status"]
+    const headers = ["ID", "Date", "Time", "Business", "Customer", "NFC Card", "Type/Method", "Amount BP", "Status"]
     const escapeCsv = (value) => `"${String(value).replaceAll('"', '""')}"`
-    const csv = [headers, ...records.map((item) => [item.id, item.date, item.time, item.business, item.customer, item.card, item.method, item.amount, item.status])].map((row) => row.map(escapeCsv).join(",")).join("\n")
+    const csv = [
+      headers,
+      ...records.map((item) => [
+        item.id,
+        item.date,
+        item.time,
+        item.business,
+        item.customer,
+        item.card,
+        `${item.type}/${item.method}`,
+        `${item.amount} BP`,
+        item.status,
+      ]),
+    ]
+      .map((row) => row.map(escapeCsv).join(","))
+      .join("\n")
+
     const link = document.createElement("a")
     link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }))
     link.download = "buzztap-transactions.csv"
     link.click()
     setToast("Transactions exported")
   }
-  const downloadReceipt = (transaction) => { const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([`BuzzTap receipt\n${transaction.id}\nAmount: ₱${transaction.amount}`], { type: "text/plain" })); link.download = `${transaction.id}-receipt.txt`; link.click(); setToast("Receipt downloaded") }
+
+  const downloadReceipt = (transaction) => {
+    const receiptText = [
+      "BuzzTap receipt",
+      `Transaction ID: ${transaction.id}`,
+      `Business: ${transaction.business}`,
+      `Customer: ${transaction.customer}`,
+      `NFC Card: ${transaction.card}`,
+      `Amount: ${transaction.amount} BP`,
+      `Status: ${transaction.status}`,
+    ].join("\n")
+
+    const link = document.createElement("a")
+    link.href = URL.createObjectURL(new Blob([receiptText], { type: "text/plain" }))
+    link.download = `${transaction.id}-receipt.txt`
+    link.click()
+    setToast("Receipt downloaded")
+  }
 
   const filteredTransactions = records.filter((transaction) => {
-    const matchesSearch =
-      transaction.id.toLowerCase().includes(search.toLowerCase()) ||
-      transaction.business.toLowerCase().includes(search.toLowerCase()) ||
-      transaction.customer.toLowerCase().includes(search.toLowerCase()) ||
-      transaction.card.toLowerCase().includes(search.toLowerCase())
+    const searchValue = [
+      transaction.id,
+      transaction.business,
+      transaction.customer,
+      transaction.card,
+      transaction.type,
+      transaction.description,
+    ]
+      .map((value) => String(value ?? ""))
+      .join(" ")
+      .toLowerCase()
 
-    const matchesStatus =
-      statusFilter === "All" || transaction.status === statusFilter
+    const matchesSearch = searchValue.includes(search.toLowerCase())
+    const matchesStatus = statusFilter === "All" || transaction.status === statusFilter
     const matchesMethod = methodFilter === "All" || transaction.method === methodFilter
 
     return matchesSearch && matchesStatus && matchesMethod
   })
 
-  const completedTransactions = records.filter(
-    (transaction) => transaction.status === "Completed"
-  )
+  const completedTransactions = records.filter((transaction) => transaction.status === "Completed")
+  const totalRevenue = completedTransactions.reduce((total, transaction) => {
+    const createdAt = transaction.createdAt ? new Date(transaction.createdAt) : null
+    const today = new Date()
+    const isToday = createdAt && createdAt.toDateString() === today.toDateString()
 
-  const totalRevenue = completedTransactions.reduce(
-    (total, transaction) => total + transaction.amount,
-    0
-  )
+    return total + (isToday ? Number(transaction.amount || 0) : 0)
+  }, 0)
 
   const completedCount = completedTransactions.length
-
-  const pendingCount = records.filter(
-    (transaction) => transaction.status === "Pending"
-  ).length
+  const pendingCount = records.filter((transaction) => transaction.status === "Pending").length
 
   return (
     <div className="space-y-8">
@@ -168,7 +243,7 @@ function Transactions() {
 
           <div className="mt-3 flex items-end justify-between">
             <h2 className="text-3xl font-bold">
-              ₱{totalRevenue.toLocaleString()}
+              {totalRevenue.toLocaleString()} BP
             </h2>
 
             <span className="rounded-full bg-yellow-400/10 px-3 py-1 text-xs font-semibold text-yellow-400">
@@ -302,8 +377,15 @@ function Transactions() {
 
             <tbody>
 
-              {filteredTransactions.map((transaction) => (
+              {loading && (
+                <tr>
+                  <td colSpan="8" className="px-6 py-6 text-center text-sm text-yellow-400">
+                    Loading transactions...
+                  </td>
+                </tr>
+              )}
 
+              {!loading && !fetchError && filteredTransactions.map((transaction) => (
                 <tr
                   key={transaction.id}
                   className="border-b border-white/5 transition hover:bg-white/[0.02]"
@@ -340,7 +422,7 @@ function Transactions() {
                   <td className="px-6 py-5">
 
                     <p className="font-semibold text-white">
-                      ₱{transaction.amount.toLocaleString()}
+                      {transaction.amount.toLocaleString()} BP
                     </p>
 
                   </td>
@@ -385,6 +467,30 @@ function Transactions() {
                       </span>
                     )}
 
+                    {transaction.status === "Processing" && (
+                      <span className="rounded-full bg-blue-400/10 px-3 py-1 text-xs font-semibold text-blue-400">
+                        ● Processing
+                      </span>
+                    )}
+
+                    {transaction.status === "Cancelled" && (
+                      <span className="rounded-full bg-gray-400/10 px-3 py-1 text-xs font-semibold text-gray-300">
+                        ● Cancelled
+                      </span>
+                    )}
+
+                    {transaction.status === "Refunded" && (
+                      <span className="rounded-full bg-purple-400/10 px-3 py-1 text-xs font-semibold text-purple-400">
+                        ● Refunded
+                      </span>
+                    )}
+
+                    {transaction.status === "Voided" && (
+                      <span className="rounded-full bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-300">
+                        ● Voided
+                      </span>
+                    )}
+
                   </td>
 
                   <td className="px-6 py-5">
@@ -397,7 +503,6 @@ function Transactions() {
                   </td>
 
                 </tr>
-
               ))}
 
             </tbody>
@@ -406,18 +511,56 @@ function Transactions() {
 
         </div>
 
-        {filteredTransactions.length === 0 && (
+        {!loading && !fetchError && filteredTransactions.length === 0 && (
           <div className="px-6 py-12 text-center text-gray-500">
             No transactions found.
           </div>
         )}
 
+        {!loading && fetchError && (
+          <div className="px-6 py-12 text-center text-red-400">
+            {fetchError}
+          </div>
+        )}
+
       </div>
 
-      {selected && <Modal title="Transaction Details" onClose={() => setSelected(null)}><div className="space-y-2 text-sm"><p><span className="text-gray-500">ID:</span> {selected.id}</p><p><span className="text-gray-500">Date:</span> {selected.date}</p><p><span className="text-gray-500">Time:</span> {selected.time}</p><p><span className="text-gray-500">Business:</span> {selected.business}</p><p><span className="text-gray-500">Customer:</span> {selected.customer}</p><p><span className="text-gray-500">NFC Card:</span> {selected.card}</p><p><span className="text-gray-500">Type/Method:</span> {selected.method}</p><p><span className="text-gray-500">Amount:</span> ₱{selected.amount.toLocaleString()}</p><p><span className="text-gray-500">Status:</span> {selected.status}</p></div></Modal>}
-      {refund && <ConfirmModal title="Refund transaction?" description={`Refund ₱${refund.amount.toLocaleString()} for ${refund.id}?`} confirmLabel="Refund" destructive onConfirm={() => { setRecords((current) => current.map((item) => item.id === refund.id ? { ...item, status: "Refunded" } : item)); setToast("Transaction refunded successfully."); setRefund(null) }} onClose={() => setRefund(null)} />}
-      {toast && <Toast message={toast} onClose={() => setToast("")} />}
+      {selected && (
+        <Modal title="Transaction Details" onClose={() => setSelected(null)}>
+          <div className="space-y-2 text-sm">
+            <p><span className="text-gray-500">ID:</span> {selected.id}</p>
+            <p><span className="text-gray-500">Date:</span> {selected.date}</p>
+            <p><span className="text-gray-500">Time:</span> {selected.time}</p>
+            <p><span className="text-gray-500">Business:</span> {selected.business}</p>
+            <p><span className="text-gray-500">Customer:</span> {selected.customer}</p>
+            <p><span className="text-gray-500">NFC Card:</span> {selected.card}</p>
+            <p><span className="text-gray-500">Type:</span> {selected.type}</p>
+            <p><span className="text-gray-500">Method:</span> {selected.method}</p>
+            <p><span className="text-gray-500">Amount:</span> {selected.amount.toLocaleString()} BP</p>
+            <p><span className="text-gray-500">Status:</span> {selected.status}</p>
+            <p><span className="text-gray-500">Description:</span> {selected.description || "No description"}</p>
+          </div>
+        </Modal>
+      )}
 
+      {refund && (
+        <ConfirmModal
+          title="Refund transaction?"
+          description={`Refund ${refund.amount.toLocaleString()} BP for ${refund.id}?`}
+          confirmLabel="Refund"
+          destructive
+          onConfirm={() => {
+            // Temporary prototype behavior: refund action is frontend-only for now.
+            // This will later be replaced by a secure refund RPC against Supabase.
+            setRecords((current) => current.map((item) => item.id === refund.id ? { ...item, status: "Refunded" } : item))
+            setToast("Transaction refunded successfully.")
+            setRefund(null)
+          }}
+          onClose={() => setRefund(null)}
+        />
+      )}
+
+      {toast && <Toast message={toast} onClose={() => setToast("")} />}
     </div>
   )
 }
