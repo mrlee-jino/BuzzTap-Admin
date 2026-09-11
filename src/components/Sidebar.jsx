@@ -1,11 +1,13 @@
 import { useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
+import { supabase } from "../lib/supabaseClient"
 
 function Sidebar({ sidebarOpen, setSidebarOpen }) {
   const location = useLocation()
   const navigate = useNavigate()
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
 
   const navigation = [
     { name: "Dashboard", path: "/" },
@@ -22,13 +24,42 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
     { name: "Content Management", path: "/content" },
   ]
 
-  const handleLogout = () => {
-    sessionStorage.removeItem("buzzTapAdminLoggedIn")
+  const handleLogout = async () => {
+    if (loggingOut) return
 
-    setShowLogoutConfirm(false)
-    setSidebarOpen(false)
+    setLoggingOut(true)
 
-    navigate("/login")
+    try {
+      try {
+        const { error } = await supabase.rpc("admin_log_auth_event", {
+          p_action: "ADMIN_LOGOUT",
+          p_reason: null,
+        })
+
+        if (error) {
+          console.error("Admin logout audit logging failed:", error)
+        }
+      } catch (error) {
+        console.error("Admin logout audit logging failed:", error)
+      }
+
+      try {
+        const { error: signOutError } = await supabase.auth.signOut()
+
+        if (signOutError) {
+          console.error("Admin sign out failed:", signOutError)
+        }
+      } catch (error) {
+        console.error("Admin sign out failed:", error)
+      }
+
+      sessionStorage.removeItem("buzzTapAdminLoggedIn")
+      setShowLogoutConfirm(false)
+      setSidebarOpen(false)
+      navigate("/login")
+    } finally {
+      setLoggingOut(false)
+    }
   }
 
   return (
@@ -478,6 +509,7 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
               {/* Confirm Logout */}
               <button
                 onClick={handleLogout}
+                disabled={loggingOut}
                 className="
                   flex-1
                   py-3
@@ -490,9 +522,11 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
                   active:scale-[0.98]
                   transition-all
                   duration-200
+                  disabled:opacity-60
+                  disabled:cursor-not-allowed
                 "
               >
-                Logout
+                {loggingOut ? "Logging out..." : "Logout"}
               </button>
 
             </div>

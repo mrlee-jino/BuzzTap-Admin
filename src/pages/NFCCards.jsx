@@ -36,6 +36,10 @@ function NFCCards() {
   const [replaceOpen, setReplaceOpen] = useState(false)
   const [replaceCard, setReplaceCard] = useState(null)
   const [replaceForm, setReplaceForm] = useState({ cardCode: "", cardUid: "", reason: "" })
+  const [transferOpen, setTransferOpen] = useState(false)
+  const [transferCard, setTransferCard] = useState(null)
+  const [transferCustomers, setTransferCustomers] = useState([])
+  const [transferForm, setTransferForm] = useState({ customerId: "", reason: "" })
   const [confirm, setConfirm] = useState(null)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState(null)
@@ -184,6 +188,74 @@ function NFCCards() {
     } catch (error) {
       setToast({
         message: error.message || "Unable to replace NFC card.",
+        tone: "error",
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const loadTransferCustomers = async (currentCustomerId) => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, first_name, last_name, role, status")
+      .eq("role", "CUSTOMER")
+      .in("status", ["PENDING", "ACTIVE", "SUSPENDED", "FROZEN"])
+      .neq("id", currentCustomerId)
+
+    if (error) {
+      throw error
+    }
+
+    return (data || []).filter((customer) => customer.status !== "CLOSED" && customer.status !== "DELETED")
+  }
+
+  const handleTransfer = async (event) => {
+    event.preventDefault()
+
+    if (!transferCard) {
+      return
+    }
+
+    const selectedCustomerId = transferForm.customerId
+    const reason = (transferForm.reason || "").trim()
+
+    if (!selectedCustomerId) {
+      setToast({ message: "Please select a customer.", tone: "error" })
+      return
+    }
+
+    if (selectedCustomerId === transferCard.customer_id) {
+      setToast({ message: "Please select a different customer.", tone: "error" })
+      return
+    }
+
+    if (saving) {
+      return
+    }
+
+    setSaving(true)
+
+    try {
+      const { error } = await supabase.rpc("admin_transfer_nfc_card", {
+        p_card_id: transferCard.id,
+        p_new_customer_id: selectedCustomerId,
+        p_reason: reason || null,
+      })
+
+      if (error) {
+        throw error
+      }
+
+      setTransferOpen(false)
+      setTransferCard(null)
+      setTransferCustomers([])
+      setTransferForm({ customerId: "", reason: "" })
+      await fetchCards()
+      setToast({ message: "NFC card transferred successfully.", tone: "success" })
+    } catch (error) {
+      setToast({
+        message: error.message || "Unable to transfer NFC card.",
         tone: "error",
       })
     } finally {
@@ -367,7 +439,7 @@ function NFCCards() {
                         </button>
                       )}
 
-                      {!["REPLACED"].includes(card.status) && ["ACTIVE", "BLOCKED", "LOST", "STOLEN"].includes(card.status) && (
+                      {!['REPLACED'].includes(card.status) && ["ACTIVE", "BLOCKED", "LOST", "STOLEN"].includes(card.status) && (
                         <button
                           type="button"
                           onClick={() => {
@@ -378,6 +450,33 @@ function NFCCards() {
                           className="text-xs text-blue-400"
                         >
                           Replace
+                        </button>
+                      )}
+
+                      {card.status === "ACTIVE" && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (card.status !== "ACTIVE") {
+                              return
+                            }
+
+                            try {
+                              const eligibleCustomers = await loadTransferCustomers(card.customer_id)
+                              setTransferCard(card)
+                              setTransferCustomers(eligibleCustomers)
+                              setTransferForm({ customerId: "", reason: "" })
+                              setTransferOpen(true)
+                            } catch (error) {
+                              setToast({
+                                message: error.message || "Unable to load eligible customers.",
+                                tone: "error",
+                              })
+                            }
+                          }}
+                          className="text-xs text-purple-400"
+                        >
+                          Transfer
                         </button>
                       )}
 
@@ -543,6 +642,84 @@ function NFCCards() {
                   className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {saving ? "Replacing..." : "Replace Card"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </Modal>
+      )}
+
+      {transferOpen && transferCard && (
+        <Modal title="Transfer NFC Card" onClose={() => {
+          setTransferOpen(false)
+          setTransferCard(null)
+          setTransferCustomers([])
+          setTransferForm({ customerId: "", reason: "" })
+        }}>
+          <div className="space-y-5">
+            <div className="rounded-xl border border-white/10 bg-[#0d0d0d] p-4 text-sm text-gray-300">
+              <div className="space-y-2">
+                <p><span className="text-gray-500">Card Code:</span> {transferCard.card_code}</p>
+                <p><span className="text-gray-500">Card UID:</span> {transferCard.card_uid}</p>
+                <p><span className="text-gray-500">Current Customer:</span> {transferCard.customerName}</p>
+              </div>
+            </div>
+
+            {transferCustomers.length === 0 && (
+              <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-4 py-3 text-sm text-yellow-200">
+                No other eligible customers available for transfer.
+              </div>
+            )}
+
+            <form onSubmit={handleTransfer} className="space-y-5">
+              <label className="block text-sm text-gray-300">
+                New Customer
+                <select
+                  value={transferForm.customerId}
+                  onChange={(event) => setTransferForm({ ...transferForm, customerId: event.target.value })}
+                  className={inputClass}
+                  disabled={saving || transferCustomers.length === 0}
+                >
+                  <option value="">Select customer</option>
+                  {transferCustomers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {`${customer.first_name || ""} ${customer.last_name || ""}`.trim() || "Unnamed Customer"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block text-sm text-gray-300">
+                Reason
+                <input
+                  type="text"
+                  value={transferForm.reason}
+                  onChange={(event) => setTransferForm({ ...transferForm, reason: event.target.value })}
+                  className={inputClass}
+                  placeholder="Optional"
+                  disabled={saving}
+                />
+              </label>
+
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTransferOpen(false)
+                    setTransferCard(null)
+                    setTransferCustomers([])
+                    setTransferForm({ customerId: "", reason: "" })
+                  }}
+                  className="rounded-xl border border-white/10 px-4 py-2 text-sm text-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || transferCustomers.length === 0 || !transferForm.customerId}
+                  className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {saving ? "Transferring..." : "Transfer Card"}
                 </button>
               </div>
             </form>

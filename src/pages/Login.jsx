@@ -72,13 +72,27 @@ function Login() {
         )
       }
 
-      // 5. Store a simple session flag for the existing app
+      // 5. Log successful admin login event via secure RPC
+      try {
+        const { error: auditError } = await supabase.rpc("admin_log_auth_event", {
+          p_action: "ADMIN_LOGIN",
+          p_reason: null,
+        })
+
+        if (auditError) {
+          console.error("Admin login audit logging failed:", auditError)
+        }
+      } catch (auditError) {
+        console.error("Admin login audit logging failed:", auditError)
+      }
+
+      // 6. Store a simple session flag for the existing app
       sessionStorage.setItem(
         "buzzTapAdminLoggedIn",
         "true"
       )
 
-      // 6. Go to dashboard
+      // 7. Go to dashboard
       navigate("/")
     } catch (error) {
       console.error("Login error:", error)
