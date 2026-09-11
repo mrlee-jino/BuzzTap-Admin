@@ -1,3 +1,5 @@
+import SupabaseTest from "./pages/SupabaseTest"
+
 import { useState } from "react"
 import {
   BrowserRouter,
@@ -78,6 +80,7 @@ function AppLayout() {
         >
 
           <Routes>
+            
 
             {/* ================= LOGIN ================= */}
             <Route
@@ -142,6 +145,7 @@ function AppLayout() {
             <Route path="/treasury" element={<ProtectedRoute><BuzzPointTreasury /></ProtectedRoute>} />
             <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
             <Route path="/content" element={<ProtectedRoute><ContentManagement /></ProtectedRoute>} />
+            <Route path="/supabase-test" element={<SupabaseTest />} />
 
           </Routes>
 

@@ -1,75 +1,108 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Modal from "../components/Modal"
 import Toast from "../components/Toast"
 import DropdownMenu from "../components/DropdownMenu"
 import ConfirmModal from "../components/ConfirmModal"
+import { supabase } from "../lib/supabaseClient"
 
-const initialBusinesses = [
-    {
-      name: "CyberHub Gaming Station",
-      location: "Cabadbaran City",
-      type: "Working Station",
-      owner: "Juan Dela Cruz",
-      stations: 24,
-      status: "Active",
-      joined: "Aug 23, 2026",
-    },
-    {
-      name: "Bean & Byte Cafe",
-      location: "Butuan City",
-      type: "Cafe",
-      owner: "Maria Santos",
-      stations: 12,
-      status: "Active",
-      joined: "Aug 22, 2026",
-    },
-    {
-      name: "NextLevel Computer Shop",
-      location: "Surigao City",
-      type: "Computer Shop",
-      owner: "Alex Reyes",
-      stations: 18,
-      status: "Pending",
-      joined: "Aug 21, 2026",
-    },
-    {
-      name: "Pixel Point",
-      location: "Cagayan de Oro",
-      type: "Computer Shop",
-      owner: "Carlo Santos",
-      stations: 30,
-      status: "Active",
-      joined: "Aug 20, 2026",
-    },
-    {
-      name: "ByteZone Work Hub",
-      location: "Butuan City",
-      type: "Working Station",
-      owner: "Mark Villanueva",
-      stations: 20,
-      status: "Active",
-      joined: "Aug 18, 2026",
-    },
-    {
-      name: "Cafe Connect",
-      location: "Cabadbaran City",
-      type: "Cafe",
-      owner: "Angela Cruz",
-      stations: 8,
-      status: "Suspended",
-      joined: "Aug 15, 2026",
-    },
-]
+const formatDisplayDate = (value) => {
+  if (!value) return "N/A"
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return "N/A"
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date)
+}
+
+const normalizeStatus = (status) => {
+  const normalized = String(status || "").trim().toUpperCase()
+
+  switch (normalized) {
+    case "PENDING":
+      return "Pending"
+    case "ACTIVE":
+      return "Active"
+    case "SUSPENDED":
+      return "Suspended"
+    case "CLOSED":
+      return "Closed"
+    default:
+      return "Pending"
+  }
+}
+
+const normalizeBusiness = (business) => ({
+  ...business,
+  name: business.name || "Unnamed Business",
+  type: business.business_type || business.type || "Unknown",
+  location: business.address || business.location || "N/A",
+  owner: business.owner || "Business owner",
+  email: business.email || "",
+  phone: business.phone || "",
+  stations: Number(business.stations ?? 0),
+  status: normalizeStatus(business.status),
+  joined: formatDisplayDate(business.created_at),
+})
 
 function Businesses() {
-  const [businesses, setBusinesses] = useState(initialBusinesses)
+  const [businesses, setBusinesses] = useState([])
   const [filter, setFilter] = useState("All")
   const [search, setSearch] = useState("")
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({ name: "", location: "", type: "Cafe", owner: "", email: "", phone: "", stations: "", status: "Pending" })
   const [error, setError] = useState("")
+  const [supabaseError, setSupabaseError] = useState("")
   const [toast, setToast] = useState("")
   const [confirm, setConfirm] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let isMounted = true
+
+    const fetchBusinesses = async () => {
+      setLoading(true)
+      setSupabaseError("")
+
+      try {
+        const { data, error } = await supabase
+          .from("businesses")
+          .select("*")
+          .order("created_at", { ascending: false })
+
+        if (error) {
+          throw error
+        }
+
+        if (!isMounted) {
+          return
+        }
+
+        setBusinesses((data ?? []).map(normalizeBusiness))
+      } catch (fetchError) {
+        if (isMounted) {
+          setBusinesses([])
+          setSupabaseError(fetchError.message || "Unable to load businesses.")
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    fetchBusinesses()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const filteredBusinesses = businesses.filter((business) => {
     const query = search.toLowerCase()
@@ -182,128 +215,132 @@ function Businesses() {
 
       </div>
 
+      {loading && <div className="mt-6 rounded-2xl border border-dashed border-yellow-400/30 bg-[#111111] px-6 py-5 text-center text-sm text-yellow-400">Loading businesses from Supabase...</div>}
+      {!loading && supabaseError && <div className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/5 px-6 py-4 text-sm text-red-300">{supabaseError}</div>}
 
       {/* Business Table */}
-      <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-[#111111]">
+      {!loading && (
+        <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-[#111111]">
 
-        {/* Table Header */}
-        <div className="hidden grid-cols-[2fr_1.3fr_1fr_0.8fr_1fr_0.6fr] border-b border-white/10 px-6 py-4 text-xs uppercase tracking-wider text-gray-600 md:grid">
+          {/* Table Header */}
+          <div className="hidden grid-cols-[2fr_1.3fr_1fr_0.8fr_1fr_0.6fr] border-b border-white/10 px-6 py-4 text-xs uppercase tracking-wider text-gray-600 md:grid">
 
-          <span>Business</span>
-          <span>Type</span>
-          <span>Location</span>
-          <span>Stations</span>
-          <span>Status</span>
-          <span></span>
+            <span>Business</span>
+            <span>Type</span>
+            <span>Location</span>
+            <span>Stations</span>
+            <span>Status</span>
+            <span></span>
 
-        </div>
+          </div>
 
 
-        {/* Businesses */}
-        <div className="divide-y divide-white/5">
+          {/* Businesses */}
+          <div className="divide-y divide-white/5">
 
-          {filteredBusinesses.map((business) => (
+            {filteredBusinesses.map((business) => (
 
-            <div
-              key={business.name}
-              className="grid grid-cols-1 gap-4 px-6 py-5 transition duration-200 hover:bg-white/[0.02] md:grid-cols-[2fr_1.3fr_1fr_0.8fr_1fr_0.6fr] md:items-center"
-            >
+              <div
+                key={business.id || business.name}
+                className="grid grid-cols-1 gap-4 px-6 py-5 transition duration-200 hover:bg-white/[0.02] md:grid-cols-[2fr_1.3fr_1fr_0.8fr_1fr_0.6fr] md:items-center"
+              >
 
-              {/* Business */}
-              <div className="flex items-center gap-3">
+                {/* Business */}
+                <div className="flex items-center gap-3">
 
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-400/10 font-bold text-yellow-400">
-                  B
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-400/10 font-bold text-yellow-400">
+                    B
+                  </div>
+
+                  <div>
+
+                    <p className="font-medium">
+                      {business.name}
+                    </p>
+
+                    <p className="mt-1 text-xs text-gray-600">
+                      Joined {business.joined}
+                    </p>
+
+                  </div>
+
                 </div>
 
+
+                {/* Type */}
                 <div>
 
-                  <p className="font-medium">
-                    {business.name}
-                  </p>
+                  <span className="text-sm text-gray-400">
+                    {business.type}
+                  </span>
 
-                  <p className="mt-1 text-xs text-gray-600">
-                    Joined {business.joined}
-                  </p>
+                </div>
+
+
+                {/* Location */}
+                <div>
+
+                  <span className="text-sm text-gray-500">
+                    {business.location}
+                  </span>
+
+                </div>
+
+
+                {/* Stations */}
+                <div>
+
+                  <span className="font-medium">
+                    {business.stations}
+                  </span>
+
+                  <span className="ml-1 text-xs text-gray-600">
+                    stations
+                  </span>
+
+                </div>
+
+
+                {/* Status */}
+                <div>
+
+                  <span
+                    className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
+                      business.status === "Active"
+                        ? "bg-yellow-400/10 text-yellow-400"
+                        : business.status === "Pending"
+                        ? "bg-orange-400/10 text-orange-400"
+                        : "bg-red-400/10 text-red-400"
+                    }`}
+                  >
+                    <span className="mr-1.5">
+                      •
+                    </span>
+
+                    {business.status}
+                  </span>
+
+                </div>
+
+
+                {/* Action */}
+                <div className="flex justify-start md:justify-end">
+
+                  <div className="relative"><button onClick={() => setModal(modal === business.name ? null : business.name)} className="rounded-lg px-3 py-2 text-gray-500 transition hover:bg-white/5 hover:text-yellow-400" aria-label={`Actions for ${business.name}`}>
+                    ⋮
+                  </button>{modal === business.name && <DropdownMenu options={actionOptions(business)} onSelect={(option) => { option.onClick(); if (option.label !== "View Details") setModal(null) }} />}</div>
 
                 </div>
 
               </div>
 
+            ))}
 
-              {/* Type */}
-              <div>
-
-                <span className="text-sm text-gray-400">
-                  {business.type}
-                </span>
-
-              </div>
-
-
-              {/* Location */}
-              <div>
-
-                <span className="text-sm text-gray-500">
-                  {business.location}
-                </span>
-
-              </div>
-
-
-              {/* Stations */}
-              <div>
-
-                <span className="font-medium">
-                  {business.stations}
-                </span>
-
-                <span className="ml-1 text-xs text-gray-600">
-                  stations
-                </span>
-
-              </div>
-
-
-              {/* Status */}
-              <div>
-
-                <span
-                  className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
-                    business.status === "Active"
-                      ? "bg-yellow-400/10 text-yellow-400"
-                      : business.status === "Pending"
-                      ? "bg-orange-400/10 text-orange-400"
-                      : "bg-red-400/10 text-red-400"
-                  }`}
-                >
-                  <span className="mr-1.5">
-                    •
-                  </span>
-
-                  {business.status}
-                </span>
-
-              </div>
-
-
-              {/* Action */}
-              <div className="flex justify-start md:justify-end">
-
-                <div className="relative"><button onClick={() => setModal(modal === business.name ? null : business.name)} className="rounded-lg px-3 py-2 text-gray-500 transition hover:bg-white/5 hover:text-yellow-400" aria-label={`Actions for ${business.name}`}>
-                  ⋮
-                </button>{modal === business.name && <DropdownMenu options={actionOptions(business)} onSelect={(option) => { option.onClick(); if (option.label !== "View Details") setModal(null) }} />}</div>
-
-              </div>
-
-            </div>
-
-          ))}
+          </div>
+          {filteredBusinesses.length === 0 && <div className="px-6 py-12 text-center text-gray-500">No businesses found.</div>}
 
         </div>
-        {filteredBusinesses.length === 0 && <div className="px-6 py-12 text-center text-gray-500">No businesses found.</div>}
-
-      </div>
+      )}
 
       {(modal === "add" || modal === "edit") && <Modal title={modal === "add" ? "Add Business" : "Edit Business"} onClose={() => setModal(null)}><form onSubmit={saveBusiness} className="space-y-4"><input required placeholder="Business name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="field" /><input required placeholder="Location" value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} className="field" /><input required placeholder="Owner" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} className="field" /><input required type="email" placeholder="Email" value={form.email || ""} onChange={(event) => setForm({ ...form, email: event.target.value })} className="field" /><input required placeholder="Phone" value={form.phone || ""} onChange={(event) => setForm({ ...form, phone: event.target.value })} className="field" /><select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })} className="field"><option>Cafe</option><option>Computer Shop</option><option>Working Station</option></select><input required min="1" type="number" placeholder="Stations" value={form.stations} onChange={(event) => setForm({ ...form, stations: event.target.value })} className="field" /><select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} className="field"><option>Active</option><option>Pending</option><option>Suspended</option></select>{error && <p className="text-sm text-red-400">{error}</p>}<div className="flex justify-end gap-3"><button type="button" onClick={() => setModal(null)} className="rounded-xl border border-white/10 px-5 py-3 text-sm text-gray-300">Cancel</button><button className="rounded-xl bg-yellow-400 px-5 py-3 font-semibold text-black">{modal === "add" ? "Add Business" : "Save Business"}</button></div></form></Modal>}
       {modal && !["add", "edit"].includes(modal) && <Modal title="Business Details" onClose={() => setModal(null)}><p className="text-lg font-semibold">{businesses.find((item) => item.name === modal)?.name}</p><p className="mt-2 text-gray-400">{businesses.find((item) => item.name === modal)?.owner} · {businesses.find((item) => item.name === modal)?.location}</p></Modal>}

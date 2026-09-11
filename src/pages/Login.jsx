@@ -1,45 +1,90 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { supabase } from "../lib/supabaseClient"
 
 function Login() {
   const navigate = useNavigate()
 
-  const [username, setUsername] = useState("")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault()
 
     setError("")
 
-    if (!username || !password) {
-      setError("Please enter your username and password.")
+    if (!email || !password) {
+      setError("Please enter your email and password.")
       return
     }
 
     setLoading(true)
 
-    // Phase 1 temporary admin credentials
-    setTimeout(() => {
-      if (username === "admin" && password === "buzztap123") {
+    try {
+      // 1. Sign in with Supabase Auth
+      const { data: authData, error: authError } =
+        await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        })
 
-        sessionStorage.setItem(
-          "buzzTapAdminLoggedIn",
-          "true"
-        )
-
-        navigate("/")
-
-      } else {
-
-        setError("Invalid username or password.")
-        setLoading(false)
-
+      if (authError) {
+        throw new Error("Invalid email or password.")
       }
-    }, 700)
+
+      const user = authData.user
+
+      if (!user) {
+        throw new Error("Unable to retrieve your account.")
+      }
+
+      // 2. Get the user's BuzzTap profile
+      const { data: profile, error: profileError } =
+        await supabase
+          .from("profiles")
+          .select("id, first_name, last_name, role, status")
+          .eq("id", user.id)
+          .single()
+
+      if (profileError) {
+        await supabase.auth.signOut()
+        throw new Error(
+          "Your account profile could not be found."
+        )
+      }
+
+      // 3. Make sure this account is an administrator
+      if (profile.role !== "ADMIN") {
+        await supabase.auth.signOut()
+        throw new Error(
+          "Access denied. This account is not a BuzzTap administrator."
+        )
+      }
+
+      // 4. Check account status
+      if (profile.status !== "ACTIVE") {
+        await supabase.auth.signOut()
+        throw new Error(
+          `Your account is currently ${profile.status.toLowerCase()}.`
+        )
+      }
+
+      // 5. Store a simple session flag for the existing app
+      sessionStorage.setItem(
+        "buzzTapAdminLoggedIn",
+        "true"
+      )
+
+      // 6. Go to dashboard
+      navigate("/")
+    } catch (error) {
+      console.error("Login error:", error)
+      setError(error.message || "Unable to sign in.")
+      setLoading(false)
+    }
   }
 
   return (
@@ -91,7 +136,6 @@ function Login() {
 
         {/* Logo */}
         <div className="flex justify-center mb-7">
-
           <div className="
             w-16
             h-16
@@ -107,12 +151,10 @@ function Login() {
           ">
             B
           </div>
-
         </div>
 
         {/* Heading */}
         <div className="text-center mb-8">
-
           <h1 className="
             text-3xl
             font-bold
@@ -128,7 +170,6 @@ function Login() {
           ">
             Admin Portal
           </p>
-
         </div>
 
         {/* Login card */}
@@ -143,7 +184,6 @@ function Login() {
         ">
 
           <div className="mb-6">
-
             <h2 className="
               text-xl
               font-semibold
@@ -158,7 +198,6 @@ function Login() {
             ">
               Sign in to manage the BuzzTap platform.
             </p>
-
           </div>
 
           <form
@@ -166,27 +205,26 @@ function Login() {
             className="space-y-5"
           >
 
-            {/* Username */}
+            {/* Email */}
             <div>
-
               <label className="
                 block
                 text-sm
                 text-gray-400
                 mb-2
               ">
-                Username
+                Email
               </label>
 
               <input
-                type="text"
-                value={username}
+                type="email"
+                value={email}
                 onChange={(e) => {
-                  setUsername(e.target.value)
+                  setEmail(e.target.value)
                   setError("")
                 }}
-                placeholder="Enter your username"
-                autoComplete="username"
+                placeholder="Enter your email"
+                autoComplete="email"
                 className="
                   w-full
                   bg-[#080808]
@@ -204,12 +242,10 @@ function Login() {
                   transition-all
                 "
               />
-
             </div>
 
             {/* Password */}
             <div>
-
               <label className="
                 block
                 text-sm
@@ -220,7 +256,6 @@ function Login() {
               </label>
 
               <div className="relative">
-
                 <input
                   type={showPassword ? "text" : "password"}
                   value={password}
@@ -266,9 +301,7 @@ function Login() {
                 >
                   {showPassword ? "◉" : "○"}
                 </button>
-
               </div>
-
             </div>
 
             {/* Error */}
@@ -312,7 +345,6 @@ function Login() {
             </button>
 
           </form>
-
         </div>
 
         {/* Footer */}
@@ -326,7 +358,6 @@ function Login() {
         </p>
 
       </div>
-
     </div>
   )
 }

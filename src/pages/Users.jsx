@@ -1,84 +1,15 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { supabase } from "../lib/supabaseClient"
 import Modal from "../components/Modal"
 import Toast from "../components/Toast"
 import DropdownMenu from "../components/DropdownMenu"
 import ConfirmModal from "../components/ConfirmModal"
 
-const users = [
-  {
-    id: "USR-001",
-    name: "Juan Dela Cruz",
-    email: "juan.delacruz@email.com",
-    role: "Business Staff",
-    business: "CyberHub Gaming Station",
-    lastActive: "Just now",
-    joined: "Aug 12, 2026",
-    status: "Active",
-  },
-  {
-    id: "USR-002",
-    name: "Maria Santos",
-    email: "maria.santos@email.com",
-    role: "Business Owner",
-    business: "Bean & Byte Cafe",
-    lastActive: "5 minutes ago",
-    joined: "Aug 10, 2026",
-    status: "Active",
-  },
-  {
-    id: "USR-003",
-    name: "Alex Reyes",
-    email: "alex.reyes@email.com",
-    role: "Business Staff",
-    business: "NextLevel Computer Shop",
-    lastActive: "18 minutes ago",
-    joined: "Aug 8, 2026",
-    status: "Active",
-  },
-  {
-    id: "USR-004",
-    name: "Carlo Santos",
-    email: "carlo.santos@email.com",
-    role: "Business Owner",
-    business: "Pixel Point",
-    lastActive: "2 hours ago",
-    joined: "Aug 5, 2026",
-    status: "Pending",
-  },
-  {
-    id: "USR-005",
-    name: "Angela Cruz",
-    email: "angela.cruz@email.com",
-    role: "Business Staff",
-    business: "CyberHub Gaming Station",
-    lastActive: "Yesterday",
-    joined: "Jul 29, 2026",
-    status: "Suspended",
-  },
-  {
-    id: "USR-006",
-    name: "Mark Villanueva",
-    email: "mark.villanueva@email.com",
-    role: "Business Owner",
-    business: "Bean & Byte Cafe",
-    lastActive: "Today, 1:32 PM",
-    joined: "Jul 25, 2026",
-    status: "Active",
-  },
-  {
-    id: "USR-007",
-    name: "Lee Tejones",
-    email: "lee.tejones@email.com",
-    role: "Platform Admin",
-    business: "BuzzTap",
-    lastActive: "Today, 10:31 PM",
-    joined: "Jul 20, 2026",
-    status: "Active",
-  },
-]
 
 function Users() {
-  const [records, setRecords] = useState(users)
+  const [records, setRecords] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("All")
   const [modal, setModal] = useState(null)
@@ -111,6 +42,79 @@ function Users() {
   const suspendedUsers = records.filter(
     (user) => user.status === "Suspended"
   ).length
+
+  useEffect(() => {
+  loadUsers()
+}, [])
+
+async function loadUsers() {
+  setLoading(true)
+  setLoadError("")
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select(`
+      id,
+      first_name,
+      last_name,
+      phone,
+      role,
+      status,
+      created_at
+    `)
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("Failed to load users:", error)
+    setLoadError(error.message)
+    setLoading(false)
+    return
+  }
+
+  const formattedUsers = (data || []).map((profile) => ({
+    id: profile.id,
+    name: `${profile.first_name} ${profile.last_name}`,
+    email: "Not available yet",
+    role: formatRole(profile.role),
+    business: "Not assigned",
+    lastActive: "Not available yet",
+    joined: new Date(profile.created_at).toLocaleDateString(
+      "en-US",
+      {
+        month: "short",
+        day: "numeric",
+        year: "numeric"
+      }
+    ),
+    status: formatStatus(profile.status)
+  }))
+
+  setRecords(formattedUsers)
+  setLoading(false)
+}
+
+function formatRole(role) {
+  const roles = {
+    CUSTOMER: "Customer",
+    BUSINESS_OWNER: "Business Owner",
+    BUSINESS_STAFF: "Business Staff",
+    ADMIN: "Platform Admin"
+  }
+
+  return roles[role] || role
+}
+
+function formatStatus(status) {
+  const statuses = {
+    ACTIVE: "Active",
+    PENDING: "Pending",
+    SUSPENDED: "Suspended",
+    DISABLED: "Disabled",
+    CLOSED: "Closed"
+  }
+
+  return statuses[status] || status
+}
 
   return (
     <div className="space-y-8">
@@ -282,8 +286,27 @@ function Users() {
             </thead>
 
             <tbody>
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan="7"
+                    className="px-6 py-12 text-center text-gray-500"
+                  >
+                    Loading users from Supabase...
+                  </td>
+                </tr>
+              ) : loadError ? (
+                <tr>
+                  <td
+                    colSpan="7"
+                    className="px-6 py-12 text-center text-red-400"
+                  >
+                    Failed to load users: {loadError}
+                  </td>
+                </tr>
+              ) : (
 
-              {filteredUsers.map((user) => (
+              filteredUsers.map((user) => (
 
                 <tr
                   key={user.id}
@@ -394,7 +417,7 @@ function Users() {
 
                 </tr>
 
-              ))}
+              )))}
 
             </tbody>
 
