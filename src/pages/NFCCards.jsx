@@ -33,6 +33,9 @@ function NFCCards() {
   const [fetchError, setFetchError] = useState("")
   const [assignOpen, setAssignOpen] = useState(false)
   const [assignForm, setAssignForm] = useState({ customerId: "", cardCode: "", cardUid: "", reason: "" })
+  const [replaceOpen, setReplaceOpen] = useState(false)
+  const [replaceCard, setReplaceCard] = useState(null)
+  const [replaceForm, setReplaceForm] = useState({ cardCode: "", cardUid: "", reason: "" })
   const [confirm, setConfirm] = useState(null)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState(null)
@@ -135,6 +138,56 @@ function NFCCards() {
         message: error.message || "Unable to update NFC card status.",
         tone: "error",
       })
+    }
+  }
+
+  const handleReplace = async (event) => {
+    event.preventDefault()
+
+    if (!replaceCard) {
+      return
+    }
+
+    const cardCode = (replaceForm.cardCode || "").trim()
+    const cardUid = (replaceForm.cardUid || "").trim()
+    const reason = (replaceForm.reason || "").trim()
+
+    if (!cardCode) {
+      setToast({ message: "New Card Code is required.", tone: "error" })
+      return
+    }
+
+    if (!cardUid) {
+      setToast({ message: "New Card UID is required.", tone: "error" })
+      return
+    }
+
+    setSaving(true)
+
+    try {
+      const { error } = await supabase.rpc("admin_replace_nfc_card", {
+        p_old_card_id: replaceCard.id,
+        p_new_card_code: cardCode,
+        p_new_card_uid: cardUid,
+        p_reason: reason,
+      })
+
+      if (error) {
+        throw error
+      }
+
+      setReplaceOpen(false)
+      setReplaceCard(null)
+      setReplaceForm({ cardCode: "", cardUid: "", reason: "" })
+      await fetchCards()
+      setToast({ message: "NFC card replaced successfully.", tone: "success" })
+    } catch (error) {
+      setToast({
+        message: error.message || "Unable to replace NFC card.",
+        tone: "error",
+      })
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -314,6 +367,20 @@ function NFCCards() {
                         </button>
                       )}
 
+                      {!["REPLACED"].includes(card.status) && ["ACTIVE", "BLOCKED", "LOST", "STOLEN"].includes(card.status) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReplaceCard(card)
+                            setReplaceForm({ cardCode: "", cardUid: "", reason: "" })
+                            setReplaceOpen(true)
+                          }}
+                          className="text-xs text-blue-400"
+                        >
+                          Replace
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => {
@@ -407,6 +474,79 @@ function NFCCards() {
               </button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {replaceOpen && replaceCard && (
+        <Modal title="Replace NFC Card" onClose={() => { setReplaceOpen(false); setReplaceCard(null); setReplaceForm({ cardCode: "", cardUid: "", reason: "" }) }}>
+          <div className="space-y-5">
+            <div className="rounded-xl border border-white/10 bg-[#0d0d0d] p-4 text-sm text-gray-300">
+              <p className="font-semibold text-white">Current card</p>
+              <div className="mt-3 space-y-2">
+                <p><span className="text-gray-500">Customer:</span> {replaceCard.customerName}</p>
+                <p><span className="text-gray-500">Card Code:</span> {replaceCard.card_code}</p>
+                <p><span className="text-gray-500">Card UID:</span> {replaceCard.card_uid}</p>
+                <p><span className="text-gray-500">Status:</span> {replaceCard.status}</p>
+              </div>
+              <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-red-200">
+                This old card will be permanently retired and marked as REPLACED. The replacement card must belong to the same customer.
+              </p>
+            </div>
+
+            <form onSubmit={handleReplace} className="space-y-5">
+              <label className="block text-sm text-gray-300">
+                New Card Code
+                <input
+                  type="text"
+                  value={replaceForm.cardCode}
+                  onChange={(event) => setReplaceForm({ ...replaceForm, cardCode: event.target.value })}
+                  className={inputClass}
+                  placeholder="Enter new card code"
+                  required
+                />
+              </label>
+
+              <label className="block text-sm text-gray-300">
+                New Card UID
+                <input
+                  type="text"
+                  value={replaceForm.cardUid}
+                  onChange={(event) => setReplaceForm({ ...replaceForm, cardUid: event.target.value })}
+                  className={inputClass}
+                  placeholder="Enter new card UID"
+                  required
+                />
+              </label>
+
+              <label className="block text-sm text-gray-300">
+                Reason
+                <input
+                  type="text"
+                  value={replaceForm.reason}
+                  onChange={(event) => setReplaceForm({ ...replaceForm, reason: event.target.value })}
+                  className={inputClass}
+                  placeholder="Optional"
+                />
+              </label>
+
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setReplaceOpen(false); setReplaceCard(null); setReplaceForm({ cardCode: "", cardUid: "", reason: "" }) }}
+                  className="rounded-xl border border-white/10 px-4 py-2 text-sm text-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {saving ? "Replacing..." : "Replace Card"}
+                </button>
+              </div>
+            </form>
+          </div>
         </Modal>
       )}
 
