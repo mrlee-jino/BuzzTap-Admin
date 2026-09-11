@@ -76,6 +76,77 @@ const normalizeCustomer = (profile) => ({
   joined: formatJoinedDate(profile.created_at),
 })
 
+const formatAuditLabel = (action) => {
+  const normalized = String(action || "").toUpperCase()
+  switch (normalized) {
+    case "CUSTOMER_STATUS_CHANGED":
+      return "Status Update"
+    case "CUSTOMER_PROFILE_UPDATED":
+      return "Profile Update"
+    default:
+      return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())
+  }
+}
+
+const extractAuditSummary = (audit) => {
+  const details = audit?.details || {}
+  const reason = details.reason || null
+
+  if (audit?.action === "CUSTOMER_STATUS_CHANGED") {
+    const oldStatus = details.old_status ? String(details.old_status) : null
+    const newStatus = details.new_status ? String(details.new_status) : null
+
+    if (oldStatus && newStatus) {
+      return {
+        primary: `${oldStatus} → ${newStatus}`,
+        secondary: reason || null,
+      }
+    }
+
+    return {
+      primary: "Status updated",
+      secondary: reason || null,
+    }
+  }
+
+  if (audit?.action === "CUSTOMER_PROFILE_UPDATED") {
+    const changes = []
+
+    if (details.old_first_name && details.new_first_name && details.old_first_name !== details.new_first_name) {
+      changes.push(`First name: ${details.old_first_name} → ${details.new_first_name}`)
+    }
+
+    if (details.old_last_name && details.new_last_name && details.old_last_name !== details.new_last_name) {
+      changes.push(`Last name: ${details.old_last_name} → ${details.new_last_name}`)
+    }
+
+    if (details.old_phone && details.new_phone && details.old_phone !== details.new_phone) {
+      changes.push(`Phone: ${details.old_phone} → ${details.new_phone}`)
+    }
+
+    if (!changes.length) {
+      const fallback = []
+      if (details.old_first_name || details.new_first_name) fallback.push("first name")
+      if (details.old_last_name || details.new_last_name) fallback.push("last name")
+      if (details.old_phone || details.new_phone) fallback.push("phone")
+      return {
+        primary: fallback.length ? `Updated ${fallback.join(", ")}` : "Profile updated",
+        secondary: reason || null,
+      }
+    }
+
+    return {
+      primary: changes.join(" • "),
+      secondary: reason || null,
+    }
+  }
+
+  return {
+    primary: action ? formatAuditLabel(audit.action) : "Activity recorded",
+    secondary: reason || null,
+  }
+}
+
 const getNextStatus = (label) => {
   switch (label) {
     case "Suspend":
@@ -99,6 +170,9 @@ function Customers() {
   const [status, setStatus] = useState("All")
   const [selected, setSelected] = useState(null)
   const [profileView, setProfileView] = useState(null)
+  const [auditHistory, setAuditHistory] = useState([])
+  const [auditLoading, setAuditLoading] = useState(false)
+  const [auditError, setAuditError] = useState("")
   const [editCustomer, setEditCustomer] = useState(null)
   const [editForm, setEditForm] = useState({ firstName: "", lastName: "", phone: "", reason: "" })
   const [loadForm, setLoadForm] = useState({ amount: "", reason: "" })
@@ -143,6 +217,60 @@ function Customers() {
   useEffect(() => {
     fetchCustomers()
   }, [])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const fetchAuditHistory = async () => {
+      if (!profileView?.id) {
+        setAuditHistory([])
+        setAuditError("")
+        setAuditLoading(false)
+        return
+      }
+
+      setAuditLoading(true)
+      setAuditError("")
+
+      try {
+        const { data, error } = await supabase
+          .from("audit_logs")
+          .select(`
+            id,
+            actor_user_id,
+            action,
+            target_type,
+            target_id,
+            details,
+            created_at
+          `)
+          .eq("target_type", "CUSTOMER")
+          .eq("target_id", profileView.id)
+          .order("created_at", { ascending: false })
+
+        if (error) {
+          throw error
+        }
+
+        if (!isMounted) return
+        setAuditHistory(data || [])
+      } catch (error) {
+        if (!isMounted) return
+        setAuditHistory([])
+        setAuditError(error.message || "Unable to load audit history.")
+      } finally {
+        if (isMounted) {
+          setAuditLoading(false)
+        }
+      }
+    }
+
+    fetchAuditHistory()
+
+    return () => {
+      isMounted = false
+    }
+  }, [profileView?.id])
 
   const loadCustomer = ({ customerId, amount, reason }) => {
     const value = Number(amount)
@@ -498,6 +626,65 @@ function Customers() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-[#0c0c0c] p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">Audit History</h4>
+              </div>
+
+              {auditLoading && (
+                <div className="rounded-xl border border-dashed border-yellow-400/30 bg-[#111111] px-4 py-3 text-sm text-yellow-400">
+                  Loading audit history...
+                </div>
+              )}
+
+              {!auditLoading && auditError && (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm text-red-300">
+                  {auditError}
+                </div>
+              )}
+
+              {!auditLoading && !auditError && auditHistory.length === 0 && (
+                <div className="rounded-xl border border-dashed border-white/10 bg-[#111111] px-4 py-3 text-sm text-gray-400">
+                  No audit history available for this customer.
+                </div>
+              )}
+
+              {!auditLoading && !auditError && auditHistory.length > 0 && (
+                <div className="space-y-3">
+                  {auditHistory.map((audit) => {
+                    const summary = extractAuditSummary(audit)
+                    const actor = audit.actor_user_id ? "Administrator" : "Administrator"
+
+                    return (
+                      <div key={audit.id} className="rounded-xl border border-white/10 bg-[#111111] p-4">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-white">{formatAuditLabel(audit.action)}</p>
+                            <p className="mt-1 text-xs text-gray-500">{actor}</p>
+                          </div>
+                          <p className="text-xs text-gray-500">{formatDisplayDate(audit.created_at)}</p>
+                        </div>
+
+                        <div className="mt-3 space-y-2 text-sm text-gray-300">
+                          {summary.primary && (
+                            <p>
+                              <span className="text-gray-500">Change:</span> {summary.primary}
+                            </p>
+                          )}
+
+                          {summary.secondary && (
+                            <p>
+                              <span className="text-gray-500">Reason:</span> {summary.secondary}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </Modal>
