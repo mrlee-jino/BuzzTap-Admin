@@ -99,6 +99,8 @@ function Customers() {
   const [status, setStatus] = useState("All")
   const [selected, setSelected] = useState(null)
   const [profileView, setProfileView] = useState(null)
+  const [editCustomer, setEditCustomer] = useState(null)
+  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", phone: "", reason: "" })
   const [loadForm, setLoadForm] = useState({ amount: "", reason: "" })
   const [confirm, setConfirm] = useState(null)
   const [toast, setToast] = useState(null)
@@ -227,6 +229,59 @@ function Customers() {
     setToast({ message: result.note || "BuzzPoints loaded.", tone: "success" })
   }
 
+  const openEditCustomer = (customer) => {
+    setEditCustomer(customer)
+    setEditForm({
+      firstName: customer.firstName || "",
+      lastName: customer.lastName || "",
+      phone: customer.phone && customer.phone !== "Not available" ? String(customer.phone).trim() : "",
+      reason: "",
+    })
+  }
+
+  const saveCustomerProfile = async () => {
+    if (!editCustomer) return
+
+    const firstName = (editForm.firstName || "").trim()
+    const lastName = (editForm.lastName || "").trim()
+    const phone = (editForm.phone || "").trim()
+    const reason = (editForm.reason || "").trim()
+
+    if (!firstName) {
+      setToast({ message: "First name cannot be empty.", tone: "error" })
+      return
+    }
+
+    if (!lastName) {
+      setToast({ message: "Last name cannot be empty.", tone: "error" })
+      return
+    }
+
+    try {
+      const { error } = await supabase.rpc("admin_update_customer_profile", {
+        p_customer_id: editCustomer.id,
+        p_first_name: firstName,
+        p_last_name: lastName,
+        p_phone: phone,
+        p_reason: reason,
+      })
+
+      if (error) {
+        throw error
+      }
+
+      await fetchCustomers()
+      setEditCustomer(null)
+      setEditForm({ firstName: "", lastName: "", phone: "", reason: "" })
+      setToast({ message: "Customer profile updated successfully.", tone: "success" })
+    } catch (error) {
+      setToast({
+        message: error.message || "Unable to update customer profile.",
+        tone: "error",
+      })
+    }
+  }
+
   const actions = (customer) => {
     if (customer.status === "ACTIVE") return ["Suspend", "Freeze", "Close", "Soft Delete"]
     if (customer.status === "SUSPENDED") return ["Reactivate", "Freeze", "Close", "Soft Delete"]
@@ -320,7 +375,7 @@ function Customers() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setToast({ message: "Edit is prototype-only." })}
+                        onClick={() => openEditCustomer(customer)}
                         className="text-xs text-gray-400 hover:text-white"
                       >
                         Edit
@@ -443,6 +498,64 @@ function Customers() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {editCustomer && (
+        <Modal title="Edit Customer Profile" onClose={() => setEditCustomer(null)} wide>
+          <div className="space-y-5">
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="block text-sm text-gray-300">
+                First Name
+                <input
+                  type="text"
+                  value={editForm.firstName}
+                  onChange={(event) => setEditForm({ ...editForm, firstName: event.target.value })}
+                  className={inputClass}
+                />
+              </label>
+              <label className="block text-sm text-gray-300">
+                Last Name
+                <input
+                  type="text"
+                  value={editForm.lastName}
+                  onChange={(event) => setEditForm({ ...editForm, lastName: event.target.value })}
+                  className={inputClass}
+                />
+              </label>
+            </div>
+
+            <label className="block text-sm text-gray-300">
+              Phone
+              <input
+                type="text"
+                value={editForm.phone}
+                onChange={(event) => setEditForm({ ...editForm, phone: event.target.value })}
+                className={inputClass}
+                placeholder="Optional"
+              />
+            </label>
+
+            <label className="block text-sm text-gray-300">
+              Reason
+              <input
+                type="text"
+                value={editForm.reason}
+                onChange={(event) => setEditForm({ ...editForm, reason: event.target.value })}
+                className={inputClass}
+                placeholder="Optional"
+              />
+            </label>
+
+            <div className="flex justify-end gap-3 pt-3">
+              <button type="button" onClick={() => setEditCustomer(null)} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-gray-300">
+                Cancel
+              </button>
+              <button type="button" onClick={saveCustomerProfile} className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-semibold text-black">
+                Save Changes
+              </button>
             </div>
           </div>
         </Modal>
