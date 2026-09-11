@@ -23,13 +23,55 @@ const formatJoinedDate = (value) => {
   }).format(date)
 }
 
+const formatDisplayDate = (value) => {
+  if (!value) return "Not available"
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return "Not available"
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date)
+}
+
+const formatRole = (role) => {
+  if (!role) return "Customer"
+
+  const normalized = String(role).toUpperCase()
+  return normalized === "CUSTOMER" ? "Customer" : String(role)
+}
+
+const getInitials = (name) => {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+
+  if (parts.length === 0) return "CU"
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
+}
+
 const normalizeCustomer = (profile) => ({
   id: profile.id,
+  firstName: profile.first_name || "",
+  lastName: profile.last_name || "",
   name: `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unnamed Customer",
   email: "Not available yet",
   phone: profile.phone || "Not available",
   cardId: "Not assigned",
+  role: profile.role || "CUSTOMER",
   status: String(profile.status || "PENDING").toUpperCase(),
+  createdAt: profile.created_at || null,
+  updatedAt: profile.updated_at || null,
   balance: 0,
   joined: formatJoinedDate(profile.created_at),
 })
@@ -56,6 +98,7 @@ function Customers() {
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("All")
   const [selected, setSelected] = useState(null)
+  const [profileView, setProfileView] = useState(null)
   const [loadForm, setLoadForm] = useState({ amount: "", reason: "" })
   const [confirm, setConfirm] = useState(null)
   const [toast, setToast] = useState(null)
@@ -76,7 +119,8 @@ function Customers() {
           phone,
           role,
           status,
-          created_at
+          created_at,
+          updated_at
         `)
         .eq("role", "CUSTOMER")
         .order("created_at", { ascending: false })
@@ -269,7 +313,7 @@ function Customers() {
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => setToast({ message: `${customer.name} viewed.` })}
+                        onClick={() => setProfileView(customer)}
                         className="text-xs text-gray-400 hover:text-white"
                       >
                         View
@@ -340,6 +384,66 @@ function Customers() {
             <button onClick={submitLoad} className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-semibold text-black">
               Confirm Load
             </button>
+          </div>
+        </Modal>
+      )}
+
+      {profileView && (
+        <Modal title="Customer Profile" onClose={() => setProfileView(null)} wide>
+          <div className="space-y-6">
+            <div className="flex items-center gap-4 border-b border-white/10 pb-5">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-yellow-400/10 text-lg font-semibold text-yellow-400">
+                {getInitials(profileView.name)}
+              </div>
+              <div>
+                <h3 className="text-2xl font-semibold text-white">{profileView.name}</h3>
+                <p className="text-sm text-gray-400">{formatRole(profileView.role)}</p>
+              </div>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2">
+              <div className="space-y-4 rounded-2xl border border-white/10 bg-[#0c0c0c] p-4">
+                <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">Account Information</h4>
+
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <p className="text-gray-500">Full Name</p>
+                    <p className="mt-1 font-medium text-white">{profileView.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Customer ID</p>
+                    <p className="mt-1 font-mono text-white">{profileView.id}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Account Status</p>
+                    <p className="mt-1 text-white">{profileView.status}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Date Registered</p>
+                    <p className="mt-1 text-white">{formatDisplayDate(profileView.createdAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Last Updated</p>
+                    <p className="mt-1 text-white">{formatDisplayDate(profileView.updatedAt)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4 rounded-2xl border border-white/10 bg-[#0c0c0c] p-4">
+                <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">Contact Information</h4>
+
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <p className="text-gray-500">Phone</p>
+                    <p className="mt-1 text-white">{profileView.phone || "Not available"}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Role</p>
+                    <p className="mt-1 text-white">{formatRole(profileView.role)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </Modal>
       )}
