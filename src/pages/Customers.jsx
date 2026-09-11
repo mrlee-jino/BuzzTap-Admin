@@ -594,8 +594,8 @@ function Customers() {
                     <p className="mt-1 font-medium text-white">{profileView.name}</p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Customer ID</p>
-                    <p className="mt-1 font-mono text-white">{profileView.id}</p>
+                    <p className="text-gray-500">NFC Card ID</p>
+                    <p className="mt-1 font-mono text-white">{profileView.cardId || "Not assigned"}</p>
                   </div>
                   <div>
                     <p className="text-gray-500">Account Status</p>
