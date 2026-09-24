@@ -551,7 +551,6 @@ function Transactions() {
           confirmLabel="Refund"
           destructive
           onConfirm={() => {
-            // Temporary prototype behavior: refund action is frontend-only for now.
             // This will later be replaced by a secure refund RPC against Supabase.
             setRecords((current) => current.map((item) => item.id === refund.id ? { ...item, status: "Refunded" } : item))
             setToast("Transaction refunded successfully.")

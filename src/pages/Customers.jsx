@@ -542,7 +542,7 @@ function Customers() {
 
       {selected && (
         <Modal title={`Load ${selected.name}`} onClose={() => setSelected(null)}>
-          <p className="text-sm text-gray-500">This mock load updates the shared treasury and customer balance.</p>
+          <p className="text-sm text-gray-500">This operation updates the shared treasury and customer balance.</p>
           <label className="mt-5 block text-sm text-gray-400">
             Amount
             <input

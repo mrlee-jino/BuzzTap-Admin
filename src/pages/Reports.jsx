@@ -20,45 +20,11 @@ function Reports() {
   }
   const generateReport = () => { setGenerating(true); window.setTimeout(() => { setGenerating(false); setToast("Report generated successfully.") }, 1000) }
 
-  const revenueData = [
-    { day: "Mon", amount: 18500 },
-    { day: "Tue", amount: 22100 },
-    { day: "Wed", amount: 19800 },
-    { day: "Thu", amount: 26700 },
-    { day: "Fri", amount: 31200 },
-    { day: "Sat", amount: 35800 },
-    { day: "Sun", amount: 29400 },
-  ]
-
-  const businesses = [
-    {
-      name: "CyberHub Gaming Station",
-      transactions: 428,
-      revenue: 68450,
-      growth: "+12.4%",
-    },
-    {
-      name: "Bean & Byte Cafe",
-      transactions: 315,
-      revenue: 42800,
-      growth: "+8.7%",
-    },
-    {
-      name: "NextLevel Computer Shop",
-      transactions: 276,
-      revenue: 38950,
-      growth: "+6.2%",
-    },
-    {
-      name: "Pixel Point",
-      transactions: 198,
-      revenue: 27400,
-      growth: "+4.8%",
-    },
-  ]
+  const revenueData = []
+  const businesses = []
 
   const maxRevenue = Math.max(
-    ...revenueData.map((item) => item.amount)
+    ...revenueData.map((item) => item.amount), 0
   )
 
   const totalRevenue = revenueData.reduce(
@@ -82,8 +48,8 @@ function Reports() {
         <div className="rounded-2xl border border-yellow-400/20 bg-[#111111] p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs font-bold tracking-[0.2em] text-yellow-400">MOCK TREASURY SNAPSHOT</p>
-              <p className="mt-2 text-sm text-gray-500">Non-financial prototype metrics included in report exports.</p>
+              <p className="text-xs font-bold tracking-[0.2em] text-yellow-400">TREASURY SNAPSHOT</p>
+              <p className="mt-2 text-sm text-gray-500">No live treasury data is available.</p>
             </div>
             <div className="grid grid-cols-3 gap-5 text-right text-sm"><span><b className="block text-lg text-white">{treasury.issued.toLocaleString()}</b><small className="text-gray-500">Issued</small></span><span><b className="block text-lg text-white">{metrics.circulation.toLocaleString()}</b><small className="text-gray-500">Circulation</small></span><span><b className="block text-lg text-white">{metrics.available.toLocaleString()}</b><small className="text-gray-500">Available</small></span></div>
           </div>
@@ -495,7 +461,7 @@ function Reports() {
               </span>
 
               <span className="text-sm font-medium">
-                CyberHub Gaming
+                No data available
               </span>
 
             </div>

@@ -8,54 +8,12 @@ function Dashboard() {
   const { treasury, metrics } = useAdminData()
   const [activity, setActivity] = useState(null)
   const stats = [
-    {
-      title: "Registered Businesses",
-      value: "24",
-      description: "+3 this month",
-    },
-    {
-      title: "Active NFC Cards",
-      value: "1,248",
-      description: "+86 this month",
-    },
-    {
-      title: "Total Transactions",
-      value: "18,492",
-      description: "+12.5% this month",
-    },
-    {
-      title: "Connected Workstations",
-      value: "186",
-      description: "172 currently online",
-    },
+    { title: "Registered Businesses", value: "—", description: "No live data available" },
+    { title: "Active NFC Cards", value: "—", description: "No live data available" },
+    { title: "Total Transactions", value: "—", description: "No live data available" },
+    { title: "Connected Workstations", value: "—", description: "No live data available" },
   ]
-
-  const recentBusinesses = [
-    {
-      name: "Juan's Computer Shop",
-      type: "Computer Shop",
-      status: "Active",
-      date: "Aug 23, 2026",
-    },
-    {
-      name: "Bean & Byte Cafe",
-      type: "Cafe",
-      status: "Active",
-      date: "Aug 22, 2026",
-    },
-    {
-      name: "WorkHub Cabadbaran",
-      type: "Working Station",
-      status: "Pending",
-      date: "Aug 21, 2026",
-    },
-    {
-      name: "NextGen PC Arena",
-      type: "Computer Shop",
-      status: "Active",
-      date: "Aug 20, 2026",
-    },
-  ]
+  const recentBusinesses = []
 
   return (
     <div className="min-h-screen bg-[#080808] text-white">
@@ -101,7 +59,7 @@ function Dashboard() {
 
       <button type="button" onClick={() => navigate("/treasury")} className="w-full rounded-2xl border border-yellow-400/20 bg-[#111111] p-5 text-left transition hover:border-yellow-400/50">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div><p className="text-xs font-bold tracking-[0.2em] text-yellow-400">MOCK TREASURY</p><h2 className="mt-2 text-lg font-semibold">BuzzPoint supply snapshot</h2><p className="mt-1 text-sm text-gray-500">Prototype-only balances and reconciliation controls.</p></div>
+          <div><p className="text-xs font-bold tracking-[0.2em] text-yellow-400">TREASURY</p><h2 className="mt-2 text-lg font-semibold">BuzzPoint supply snapshot</h2><p className="mt-1 text-sm text-gray-500">No live treasury data is available.</p></div>
           <div className="grid grid-cols-3 gap-5 text-right text-sm"><span><b className="block text-lg">{treasury.issued.toLocaleString()}</b><small className="text-gray-500">Issued</small></span><span><b className="block text-lg">{metrics.available.toLocaleString()}</b><small className="text-gray-500">Available</small></span><span><b className="block text-lg text-yellow-400">{metrics.circulation.toLocaleString()}</b><small className="text-gray-500">Circulation</small></span></div>
         </div>
       </button>
@@ -132,7 +90,7 @@ function Dashboard() {
 
           <div className="divide-y divide-white/5">
 
-            {recentBusinesses.map((business) => (
+            {recentBusinesses.length === 0 ? <p className="p-6 text-sm text-gray-500">No live business data available.</p> : recentBusinesses.map((business) => (
 
               <button type="button" onClick={() => navigate("/businesses")}
                 key={business.name}
