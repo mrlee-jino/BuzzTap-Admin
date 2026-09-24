@@ -5,6 +5,28 @@ import Toast from "../components/Toast"
 import DropdownMenu from "../components/DropdownMenu"
 import ConfirmModal from "../components/ConfirmModal"
 
+function formatRole(role) {
+  const roles = {
+    CUSTOMER: "Customer",
+    BUSINESS_OWNER: "Business Owner",
+    BUSINESS_STAFF: "Business Staff",
+    ADMIN: "Platform Admin"
+  }
+
+  return roles[role] || role
+}
+
+function formatStatus(status) {
+  const statuses = {
+    ACTIVE: "Active",
+    PENDING: "Pending",
+    SUSPENDED: "Suspended",
+    DISABLED: "Disabled",
+    CLOSED: "Closed"
+  }
+
+  return statuses[status] || status
+}
 
 function Users() {
   const [records, setRecords] = useState([])
@@ -42,10 +64,6 @@ function Users() {
   const suspendedUsers = records.filter(
     (user) => user.status === "Suspended"
   ).length
-
-  useEffect(() => {
-  loadUsers()
-}, [])
 
 async function loadUsers() {
   setLoading(true)
@@ -93,28 +111,10 @@ async function loadUsers() {
   setLoading(false)
 }
 
-function formatRole(role) {
-  const roles = {
-    CUSTOMER: "Customer",
-    BUSINESS_OWNER: "Business Owner",
-    BUSINESS_STAFF: "Business Staff",
-    ADMIN: "Platform Admin"
-  }
-
-  return roles[role] || role
-}
-
-function formatStatus(status) {
-  const statuses = {
-    ACTIVE: "Active",
-    PENDING: "Pending",
-    SUSPENDED: "Suspended",
-    DISABLED: "Disabled",
-    CLOSED: "Closed"
-  }
-
-  return statuses[status] || status
-}
+  useEffect(() => {
+    const timer = window.setTimeout(loadUsers, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   return (
     <div className="space-y-8">

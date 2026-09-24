@@ -6,10 +6,6 @@ export default function SupabaseTest() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    loadProfiles()
-  }, [])
-
   async function loadProfiles() {
     setLoading(true)
     setError(null)
@@ -29,6 +25,11 @@ export default function SupabaseTest() {
     setProfiles(data || [])
     setLoading(false)
   }
+
+  useEffect(() => {
+    const timer = window.setTimeout(loadProfiles, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   if (loading) {
     return (

@@ -109,7 +109,10 @@ function NFCCards() {
   }
 
   useEffect(() => {
-    fetchCards()
+    const timer = window.setTimeout(fetchCards, 0)
+    return () => window.clearTimeout(timer)
+  // The loader is intentionally scheduled after mount to avoid a cascading render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const filtered = cards.filter((card) => {

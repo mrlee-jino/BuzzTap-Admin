@@ -142,7 +142,7 @@ const extractAuditSummary = (audit) => {
   }
 
   return {
-    primary: action ? formatAuditLabel(audit.action) : "Activity recorded",
+    primary: audit?.action ? formatAuditLabel(audit.action) : "Activity recorded",
     secondary: reason || null,
   }
 }
@@ -215,7 +215,8 @@ function Customers() {
   }
 
   useEffect(() => {
-    fetchCustomers()
+    const timer = window.setTimeout(fetchCustomers, 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   useEffect(() => {

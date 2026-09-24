@@ -1,6 +1,4 @@
-import SupabaseTest from "./pages/SupabaseTest"
-
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   BrowserRouter,
   Navigate,
@@ -25,11 +23,45 @@ import BuzzPointTreasury from "./pages/BuzzPointTreasury"
 import Customers from "./pages/Customers"
 import ContentManagement from "./pages/ContentManagement"
 import { AdminDataProvider } from "./context/AdminDataContext"
+import { supabase } from "./lib/supabaseClient"
 
 function ProtectedRoute({ children }) {
-  const isLoggedIn = sessionStorage.getItem("buzzTapAdminLoggedIn") === "true"
+  const [checkingSession, setCheckingSession] = useState(true)
+  const [session, setSession] = useState(null)
 
-  return isLoggedIn ? children : <Navigate to="/login" replace />
+  useEffect(() => {
+    let mounted = true
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (mounted) {
+        setSession(data.session)
+        setCheckingSession(false)
+      }
+    }).catch(() => {
+      if (mounted) {
+        setSession(null)
+        setCheckingSession(false)
+      }
+    })
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (mounted) {
+        setSession(nextSession)
+        setCheckingSession(false)
+      }
+    })
+
+    return () => {
+      mounted = false
+      subscription.subscription.unsubscribe()
+    }
+  }, [])
+
+  if (checkingSession) {
+    return <div className="flex min-h-screen items-center justify-center text-sm text-gray-400">Checking session...</div>
+  }
+
+  return session ? children : <Navigate to="/login" replace />
 }
 
 
@@ -145,7 +177,7 @@ function AppLayout() {
             <Route path="/treasury" element={<ProtectedRoute><BuzzPointTreasury /></ProtectedRoute>} />
             <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
             <Route path="/content" element={<ProtectedRoute><ContentManagement /></ProtectedRoute>} />
-            <Route path="/supabase-test" element={<SupabaseTest />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
 
           </Routes>
 

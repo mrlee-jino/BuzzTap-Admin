@@ -129,7 +129,8 @@ function Transactions() {
   }
 
   useEffect(() => {
-    loadTransactions()
+    const timer = window.setTimeout(loadTransactions, 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   const downloadCsv = () => {
