@@ -15,7 +15,6 @@ import Businesses from "./pages/Businesses"
 import NFCCards from "./pages/NFCCards"
 import Transactions from "./pages/Transactions"
 import Users from "./pages/Users"
-import Devices from "./pages/Devices"
 import Reports from "./pages/Reports"
 import SystemLogs from "./pages/SystemLogs"
 import Settings from "./pages/Settings"
@@ -148,12 +147,6 @@ function AppLayout() {
             <Route
               path="/users"
               element={<ProtectedRoute><Users /></ProtectedRoute>}
-            />
-
-            {/* ================= DEVICES ================= */}
-            <Route
-              path="/devices"
-              element={<ProtectedRoute><Devices /></ProtectedRoute>}
             />
 
             {/* ================= REPORTS ================= */}

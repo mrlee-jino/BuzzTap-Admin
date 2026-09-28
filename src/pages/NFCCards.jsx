@@ -47,7 +47,7 @@ function NFCCards() {
   const loadCustomers = async () => {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, first_name, last_name, role")
+      .select("id, full_name, role")
       .eq("role", "CUSTOMER")
 
     if (error) {
@@ -88,9 +88,7 @@ function NFCCards() {
 
       const normalizedCards = (data || []).map((card) => {
         const customer = customerMap.get(card.customer_id)
-        const fullName = customer
-          ? `${customer.first_name || ""} ${customer.last_name || ""}`.trim()
-          : ""
+        const fullName = customer?.full_name || ""
 
         return {
           ...card,
@@ -201,7 +199,7 @@ function NFCCards() {
   const loadTransferCustomers = async (currentCustomerId) => {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, first_name, last_name, role, status")
+      .select("id, full_name, role, status")
       .eq("role", "CUSTOMER")
       .in("status", ["PENDING", "ACTIVE", "SUSPENDED", "FROZEN"])
       .neq("id", currentCustomerId)
@@ -522,7 +520,7 @@ function NFCCards() {
                 <option value="">Select customer</option>
                 {customers.map((customer) => (
                   <option key={customer.id} value={customer.id}>
-                    {`${customer.first_name || ""} ${customer.last_name || ""}`.trim() || "Unnamed Customer"}
+                    {customer.full_name || "Unnamed Customer"}
                   </option>
                 ))}
               </select>
@@ -686,7 +684,7 @@ function NFCCards() {
                   <option value="">Select customer</option>
                   {transferCustomers.map((customer) => (
                     <option key={customer.id} value={customer.id}>
-                      {`${customer.first_name || ""} ${customer.last_name || ""}`.trim() || "Unnamed Customer"}
+                      {customer.full_name || "Unnamed Customer"}
                     </option>
                   ))}
                 </select>

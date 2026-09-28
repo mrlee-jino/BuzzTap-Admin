@@ -15,7 +15,6 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
     { name: "NFC Cards", path: "/nfc-cards" },
     { name: "Transactions", path: "/transactions" },
     { name: "Users", path: "/users" },
-    { name: "Devices", path: "/devices" },
     { name: "Reports", path: "/reports" },
     { name: "System Logs", path: "/system-logs" },
     { name: "Settings", path: "/settings" },
@@ -199,7 +198,7 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
         </div>
 
         {/* ================= NAVIGATION ================= */}
-        <nav className="p-3 mt-3 space-y-1">
+        <nav aria-label="Main navigation" className="sidebar-scroll mt-3 h-[calc(100vh-98px)] space-y-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3">
 
           {navigation.map((item) => {
 
@@ -261,7 +260,6 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
                   {item.name === "NFC Cards" && "▤"}
                   {item.name === "Transactions" && "▥"}
                   {item.name === "Users" && "♙"}
-                  {item.name === "Devices" && "◇"}
                   {item.name === "Reports" && "◫"}
                   {item.name === "System Logs" && "≡"}
                   {item.name === "Settings" && "⚙"}
@@ -295,115 +293,22 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
             )
           })}
 
-        </nav>
-
-        {/* ================= BOTTOM SECTION ================= */}
-        <div
-          className={`
-            absolute
-            bottom-4
-            left-3
-            right-3
-            transition-all
-            duration-300
-
-            ${
-              sidebarOpen
-                ? "opacity-100 translate-y-0"
-                : "opacity-0 translate-y-3 pointer-events-none"
-            }
-          `}
-        >
-
-          {/* Platform Status */}
-          <div
-            className="
-              border
-              border-white/10
-              rounded-xl
-              px-3
-              py-3
-              mb-2
-            "
-          >
-
-            <div
-              className="
-                flex
-                items-center
-                gap-2
-                text-xs
-                text-gray-500
-              "
-            >
-
-              <span
-                className="
-                  w-2
-                  h-2
-                  rounded-full
-                  bg-[#FFD400]
-                  animate-pulse
-                "
-              />
-
-              <span>
-                Platform Online
-              </span>
-
-            </div>
-
-          </div>
-
-          {/* Logout Button */}
           <button
+            type="button"
             onClick={() => setShowLogoutConfirm(true)}
-            className="
-              w-full
-              flex
-              items-center
-              gap-3
-              px-3
-              py-3
-              rounded-xl
-              text-gray-400
-              hover:text-red-400
-              hover:bg-red-500/10
-              transition-all
-              duration-200
-            "
+            title={sidebarOpen ? undefined : "Logout"}
+            aria-label="Logout"
+            className="group flex h-12 w-full items-center rounded-xl px-3 text-gray-400 transition-all duration-200 hover:bg-red-500/10 hover:text-red-400"
           >
-
-            {/* Logout Icon */}
-            <div
-              className="
-                w-9
-                h-9
-                rounded-lg
-                flex
-                items-center
-                justify-center
-                bg-white/[0.03]
-                shrink-0
-              "
-            >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.03] transition-colors group-hover:text-red-400" aria-hidden="true">
               ↪
-            </div>
-
-            {/* Logout Text */}
-            <span
-              className="
-                text-sm
-                font-medium
-                whitespace-nowrap
-              "
-            >
+            </span>
+            <span className={`ml-3 overflow-hidden whitespace-nowrap text-sm font-medium transition-all duration-300 ${sidebarOpen ? "w-auto opacity-100" : "pointer-events-none w-0 opacity-0"}`}>
               Logout
             </span>
-
           </button>
 
-        </div>
+        </nav>
 
       </aside>
 

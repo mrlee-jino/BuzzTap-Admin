@@ -27,7 +27,13 @@ begin
     for insert
     to authenticated
     with check (
-      (select public.is_admin())
+      exists (
+        select 1
+        from public.profiles as profile
+        where profile.id = (select auth.uid())
+          and profile.role = 'ADMIN'
+          and profile.status = 'ACTIVE'
+      )
       and created_by = (select auth.uid())
     );
   end if;

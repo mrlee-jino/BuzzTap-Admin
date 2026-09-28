@@ -12,7 +12,7 @@ export default function SupabaseTest() {
 
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, first_name, last_name, role, status")
+      .select("id, full_name, role, status")
       .order("created_at", { ascending: true })
 
     if (error) {
@@ -61,7 +61,7 @@ export default function SupabaseTest() {
       {profiles.map((profile) => (
         <div key={profile.id}>
           <strong>
-            {profile.first_name} {profile.last_name}
+            {profile.full_name || "Unnamed User"}
           </strong>
 
           <span>

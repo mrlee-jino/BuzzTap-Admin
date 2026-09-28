@@ -60,21 +60,26 @@ const getInitials = (name) => {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
 }
 
-const normalizeCustomer = (profile) => ({
-  id: profile.id,
-  firstName: profile.first_name || "",
-  lastName: profile.last_name || "",
-  name: `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Unnamed Customer",
-  email: "Not available yet",
-  phone: profile.phone || "Not available",
-  cardId: "Not assigned",
-  role: profile.role || "CUSTOMER",
-  status: String(profile.status || "PENDING").toUpperCase(),
-  createdAt: profile.created_at || null,
-  updatedAt: profile.updated_at || null,
-  balance: 0,
-  joined: formatJoinedDate(profile.created_at),
-})
+const normalizeCustomer = (profile) => {
+  const fullName = String(profile.full_name || "").trim()
+  const [firstName = "", ...lastNameParts] = fullName.split(/\s+/)
+
+  return {
+    id: profile.id,
+    firstName,
+    lastName: lastNameParts.join(" "),
+    name: fullName || "Unnamed Customer",
+    email: "Not available yet",
+    phone: profile.phone || "Not available",
+    cardId: "Not assigned",
+    role: profile.role || "CUSTOMER",
+    status: String(profile.status || "PENDING").toUpperCase(),
+    createdAt: profile.created_at || null,
+    updatedAt: profile.updated_at || null,
+    balance: 0,
+    joined: formatJoinedDate(profile.created_at),
+  }
+}
 
 const formatAuditLabel = (action) => {
   const normalized = String(action || "").toUpperCase()
@@ -190,8 +195,7 @@ function Customers() {
         .from("profiles")
         .select(`
           id,
-          first_name,
-          last_name,
+          full_name,
           phone,
           role,
           status,

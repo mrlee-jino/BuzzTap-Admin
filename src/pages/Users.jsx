@@ -73,8 +73,8 @@ async function loadUsers() {
     .from("profiles")
     .select(`
       id,
-      first_name,
-      last_name,
+      full_name,
+      email,
       phone,
       role,
       status,
@@ -91,8 +91,8 @@ async function loadUsers() {
 
   const formattedUsers = (data || []).map((profile) => ({
     id: profile.id,
-    name: `${profile.first_name} ${profile.last_name}`,
-    email: "Not available yet",
+    name: profile.full_name || "Unnamed User",
+    email: profile.email || "Not available yet",
     role: formatRole(profile.role),
     business: "Not assigned",
     lastActive: "Not available yet",

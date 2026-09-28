@@ -76,8 +76,7 @@ function Transactions() {
           completed_at,
           customer:profiles!transactions_customer_id_fkey(
             id,
-            first_name,
-            last_name
+            full_name
           ),
           business:businesses!transactions_business_id_fkey(
             id,
@@ -95,9 +94,7 @@ function Transactions() {
       }
 
       const normalizedTransactions = (data || []).map((transaction) => {
-        const customerName = [transaction.customer?.first_name, transaction.customer?.last_name]
-          .filter(Boolean)
-          .join(" ") || "Unknown Customer"
+        const customerName = transaction.customer?.full_name || "Unknown Customer"
         const businessName = transaction.business?.name || "Unknown Business"
         const cardCode = transaction.nfc_card?.card_code || "—"
         const dateTime = formatDateTime(transaction.created_at)

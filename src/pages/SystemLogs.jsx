@@ -2,8 +2,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "../lib/supabaseClient"
 
 const formatDisplayName = (profile) => {
-  const fullName = `${profile?.first_name || ""} ${profile?.last_name || ""}`.trim()
-  return fullName || "System"
+  return profile?.full_name || "System"
 }
 
 const normalizeActionLabel = (action = "") => {
@@ -177,7 +176,7 @@ function SystemLogs() {
         if (actorIds.length > 0) {
           const { data: profiles, error: profileError } = await supabase
             .from("profiles")
-            .select("id, first_name, last_name")
+            .select("id, full_name")
             .in("id", actorIds)
 
           if (profileError) {
