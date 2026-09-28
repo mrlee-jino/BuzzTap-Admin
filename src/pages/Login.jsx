@@ -45,15 +45,22 @@ function Login() {
       const { data: profile, error: profileError } =
         await supabase
           .from("profiles")
-          .select("id, first_name, last_name, role, status")
+          .select("id, role, status")
           .eq("id", user.id)
           .single()
 
-      if (profileError) {
+      if (profileError || !profile) {
+        console.error("Admin profile lookup failed:", {
+          code: profileError?.code,
+          message: profileError?.message,
+          details: profileError?.details,
+          hint: profileError?.hint,
+        })
         await supabase.auth.signOut()
-        throw new Error(
-          "Your account profile could not be found."
-        )
+        const message = profileError?.code === "PGRST116"
+          ? "No matching profile is visible to this account. Check the profile ID and profile access policy."
+          : `The profile lookup failed${profileError?.code ? ` (${profileError.code})` : ""}. Check the browser console for details.`
+        throw new Error(message)
       }
 
       // 3. Make sure this account is an administrator
