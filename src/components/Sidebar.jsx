@@ -17,10 +17,10 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
     { name: "Users", path: "/users" },
     { name: "Reports", path: "/reports" },
     { name: "System Logs", path: "/system-logs" },
-    { name: "Settings", path: "/settings" },
     { name: "BuzzPoint Treasury", path: "/treasury" },
     { name: "Customers", path: "/customers" },
     { name: "Content Management", path: "/content" },
+    { name: "Settings", path: "/settings" },
   ]
 
   const handleLogout = async () => {

@@ -1,12 +1,14 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useAdminData } from "../context/AdminDataContext"
 import Modal from "../components/Modal"
 import ConfirmModal from "../components/ConfirmModal"
 import Toast from "../components/Toast"
+import { supabase } from "../lib/supabaseClient"
 
 const cardClass = "rounded-2xl border border-white/10 bg-[#111111] p-5"
 const inputClass = "mt-2 w-full rounded-xl border border-white/10 bg-[#080808] px-3 py-2.5 text-sm text-white outline-none focus:border-yellow-400"
 const emptyForm = { amount: "", reason: "", reference: "", notes: "", customerId: "", businessId: "" }
+const highlightedPurchaseRequestId = "05769257-c1c4-42ba-ac00-e643a8d6df4b"
 
 function BuzzPointTreasury() {
   const { MAX_SUPPLY, treasury, metrics, ledger, businesses, customers, settlementRequests, issueBuzzPoints, loadCustomer, purchaseBusiness, updateSettlement, requestSettlementInformation } = useAdminData()
@@ -17,6 +19,51 @@ function BuzzPointTreasury() {
   const [ledgerSearch, setLedgerSearch] = useState("")
   const [ledgerType, setLedgerType] = useState("All")
   const [mockTransferConfirmed, setMockTransferConfirmed] = useState(false)
+  const [purchaseRequests, setPurchaseRequests] = useState([])
+  const [purchaseRequestsLoading, setPurchaseRequestsLoading] = useState(true)
+  const [purchaseRequestsError, setPurchaseRequestsError] = useState("")
+
+  useEffect(() => {
+    let active = true
+
+    async function loadPurchaseRequests() {
+      setPurchaseRequestsLoading(true)
+      setPurchaseRequestsError("")
+
+      const { data, error } = await supabase
+        .from("purchase_requests")
+        .select("id, business_id, amount, reference, notes, status, created_by, created_at, business:businesses(name)")
+        .order("created_at", { ascending: false })
+
+      if (error) {
+        if (active) {
+          setPurchaseRequestsError(error.message || "Unable to load BuzzPoints purchase requests.")
+          setPurchaseRequests([])
+          setPurchaseRequestsLoading(false)
+        }
+        return
+      }
+
+      if (!active) return
+
+      setPurchaseRequests((data || []).map((request) => ({
+        ...request,
+        businessName: Array.isArray(request.business) ? request.business[0]?.name : request.business?.name,
+      })))
+      setPurchaseRequestsLoading(false)
+    }
+
+    loadPurchaseRequests().catch((error) => {
+      if (active) {
+        setPurchaseRequestsError(error.message || "Unable to load BuzzPoints purchase requests.")
+        setPurchaseRequestsLoading(false)
+      }
+    })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   const open = (type) => {
     setForm({ ...emptyForm, reference: type === "purchase" ? `DEMO-BP-${Date.now()}` : "" })
@@ -44,6 +91,58 @@ function BuzzPointTreasury() {
     <div className="flex flex-wrap gap-3"><button onClick={() => open("issue")} className="rounded-xl bg-yellow-400 px-4 py-2.5 text-sm font-semibold text-black hover:bg-yellow-300">Issue BuzzPoints</button><button onClick={() => open("load")} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-gray-300 hover:border-yellow-400/40 hover:text-white">Load Customer</button><button onClick={() => open("purchase")} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-gray-300 hover:border-yellow-400/40 hover:text-white">Business Purchase</button></div>
     <section className={cardClass}><div className="flex flex-col gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">Ledger</h2><p className="mt-1 text-sm text-gray-500">Live ledger entries will appear here when connected.</p></div><div className="flex gap-2"><input aria-label="Search ledger" value={ledgerSearch} onChange={(event) => setLedgerSearch(event.target.value)} placeholder="Search ledger" className="rounded-xl border border-white/10 bg-[#080808] px-3 py-2 text-sm outline-none focus:border-yellow-400"/><select aria-label="Filter ledger type" value={ledgerType} onChange={(event) => setLedgerType(event.target.value)} className="rounded-xl border border-white/10 bg-[#080808] px-3 py-2 text-sm"><option>All</option><option>ISSUE</option><option>CUSTOMER_LOAD</option><option>BUSINESS_PURCHASE</option></select></div></div><div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="text-xs uppercase tracking-wider text-gray-600"><tr><th className="py-4">ID</th><th>Type</th><th>Amount</th><th>Destination</th><th>Reason</th><th>Created</th></tr></thead><tbody className="divide-y divide-white/5">{filteredLedger.map((item) => <tr key={item.id}><td className="py-4 font-mono text-gray-400">{item.id}</td><td className="text-yellow-400">{item.type}</td><td>{item.amount.toLocaleString()}</td><td className="text-gray-400">{item.destination}</td><td className="text-gray-400">{item.reason}</td><td className="text-gray-500">{item.createdAt}</td></tr>)}</tbody></table>{filteredLedger.length === 0 && <p className="py-8 text-center text-sm text-gray-500">No ledger entries match.</p>}</div></section>
     <section className={cardClass}><div className="mb-3"><h2 className="font-semibold">Settlement Requests</h2><p className="mt-1 text-sm text-gray-500">Review requests before a future real settlement integration.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="text-xs uppercase tracking-wider text-gray-600"><tr><th className="py-3">Request</th><th>Business</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead><tbody className="divide-y divide-white/5">{settlementRequests.map((request) => <tr key={request.id}><td className="py-4 font-mono text-gray-400">{request.id}</td><td>{request.businessName}</td><td>{request.amount.toLocaleString()}</td><td><span className="rounded-full bg-yellow-400/10 px-2 py-1 text-xs text-yellow-400">{request.status}</span></td><td className="flex gap-2 py-3">{request.status === "PENDING" ? <><button onClick={() => setToast({ message: `${request.id} viewed.` })} className="text-xs text-gray-400 hover:text-white">View</button><button onClick={() => requestSettlementInformation(request.id)} className="text-xs text-orange-400">Request Information</button><button onClick={() => confirmSettlement(request, "APPROVED")} className="text-xs text-yellow-400">Approve</button><button onClick={() => confirmSettlement(request, "REJECTED")} className="text-xs text-red-400">Reject</button></> : <span className="text-xs text-gray-600">{request.status}</span>}</td></tr>)}</tbody></table></div></section>
+    <section className={cardClass} aria-labelledby="purchase-requests-title">
+      <div className="mb-4 border-b border-white/10 pb-4">
+        <h2 id="purchase-requests-title" className="font-semibold">BuzzPoints Purchase Requests</h2>
+        <p className="mt-1 text-sm text-gray-500">Requests from businesses to purchase BuzzPoints. These rows are not payment confirmations and do not credit points.</p>
+      </div>
+      {purchaseRequestsError && <p role="alert" className="mb-4 rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-300">Unable to load purchase requests: {purchaseRequestsError}</p>}
+      {!purchaseRequestsLoading && !purchaseRequestsError && !purchaseRequests.some((request) => request.id === highlightedPurchaseRequestId) && (
+        <p role="status" className="mb-4 rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3 text-sm text-yellow-100/80">
+          Target request {highlightedPurchaseRequestId} is not visible to this admin session. It may not exist or row-level security may hide it.
+        </p>
+      )}
+      {purchaseRequestsLoading ? (
+        <p className="py-8 text-center text-sm text-gray-500">Loading BuzzPoints purchase requests...</p>
+      ) : purchaseRequests.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1280px] text-left text-sm">
+            <thead className="text-xs uppercase tracking-wider text-gray-500">
+              <tr>
+                <th className="py-3 pr-4">Request ID</th>
+                <th className="py-3 pr-4">Reference</th>
+                <th className="pr-4">Business</th>
+                <th className="pr-4">Requested BP</th>
+                <th className="pr-4">Notes</th>
+                <th className="pr-4">Status</th>
+                <th className="pr-4">Created by</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {purchaseRequests.map((request) => (
+                <tr key={request.id} className={`align-top ${request.id === highlightedPurchaseRequestId ? "bg-yellow-400/10 ring-1 ring-inset ring-yellow-400/40" : ""}`}>
+                  <td className="py-4 pr-4 font-mono text-xs text-gray-300">
+                    <span className="break-all">{request.id}</span>
+                    {request.id === highlightedPurchaseRequestId && <span className="mt-1 block font-sans font-semibold text-yellow-300">Target request</span>}
+                  </td>
+                  <td className="pr-4 font-mono text-xs text-gray-400">{request.reference || "—"}</td>
+                  <td className="pr-4 text-gray-200">{request.businessName || request.business_id}</td>
+                  <td className="whitespace-nowrap pr-4 font-medium text-yellow-300">{Number(request.amount || 0).toLocaleString()} BP</td>
+                  <td className="max-w-xs whitespace-pre-wrap pr-4 text-gray-400">{request.notes || "—"}</td>
+                  <td className="pr-4"><span className="rounded-full bg-white/5 px-2.5 py-1 text-xs text-gray-300">{request.status || "Unknown"}</span></td>
+                  <td className="break-all pr-4 font-mono text-xs text-gray-400">{request.created_by || "—"}</td>
+                  <td className="whitespace-nowrap text-gray-500">{request.created_at ? new Date(request.created_at).toLocaleString() : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : !purchaseRequestsError ? (
+        <p className="py-8 text-center text-sm text-gray-500">No BuzzPoints purchase requests found.</p>
+      ) : null}
+    </section>
+
     {modal && (
       <Modal wide title={modal === "issue" ? "Issue BuzzPoints" : modal === "load" ? "Load Customer" : "Business Purchase"} onClose={close}>
         <p className="mb-4 text-sm text-gray-500">Prototype operation. Supply checks apply; no real funds move.</p>
