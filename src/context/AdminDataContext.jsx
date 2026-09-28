@@ -44,7 +44,7 @@ function AdminDataProvider({ children }) {
     return { ok: true }
   }
 
-  const purchaseBusiness = ({ businessId, amount, reason }) => {
+  const purchaseBusiness = ({ businessId, amount, reason, reference }) => {
     const value = Number(amount)
     const business = businesses.find((item) => item.id === businessId)
     if (!business) return { ok: false, error: "Select a business." }
@@ -52,7 +52,7 @@ function AdminDataProvider({ children }) {
     if (business.inventory + value > business.allocation) return { ok: false, error: "Purchase exceeds the business allocation." }
     setTreasury((current) => ({ ...current, issued: current.issued + value }))
     setBusinesses((current) => current.map((item) => item.id === businessId ? { ...item, inventory: item.inventory + value } : item))
-    addLedger({ type: "BUSINESS_PURCHASE", amount: value, source: "Treasury", destination: businessId, reason, reference: `PO-${businessId}`, notes: "" })
+    addLedger({ type: "BUSINESS_PURCHASE", amount: value, source: "Treasury", destination: businessId, reason, reference: reference || `PO-${businessId}`, notes: "Mock bank transfer; no real funds moved." })
     appendAudit({ type: "Treasury", action: "Business purchase recorded", description: `${value.toLocaleString()} BuzzPoints allocated to ${business.name}.`, target: businessId })
     return { ok: true }
   }
