@@ -88,6 +88,8 @@ const formatAuditLabel = (action) => {
       return "Status Update"
     case "CUSTOMER_PROFILE_UPDATED":
       return "Profile Update"
+    case "CUSTOMER_BP_LOADED":
+      return "BP Load"
     default:
       return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())
   }
@@ -146,6 +148,15 @@ const extractAuditSummary = (audit) => {
     }
   }
 
+  if (audit?.action === "CUSTOMER_BP_LOADED") {
+    const amount = Number(details.amount || 0).toLocaleString()
+    const balance = Number(details.new_balance || 0).toLocaleString()
+    return {
+      primary: `${amount} BP loaded. New balance: ${balance} BP.`,
+      secondary: reason || null,
+    }
+  }
+
   return {
     primary: audit?.action ? formatAuditLabel(audit.action) : "Activity recorded",
     secondary: reason || null,
@@ -181,6 +192,7 @@ function Customers() {
   const [editCustomer, setEditCustomer] = useState(null)
   const [editForm, setEditForm] = useState({ firstName: "", lastName: "", phone: "", reason: "" })
   const [loadForm, setLoadForm] = useState({ amount: "", reason: "" })
+  const [savingLoad, setSavingLoad] = useState(false)
   const [confirm, setConfirm] = useState(null)
   const [toast, setToast] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -191,25 +203,36 @@ function Customers() {
     setFetchError("")
 
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select(`
-          id,
-          full_name,
-          phone,
-          role,
-          status,
-          created_at,
-          updated_at
-        `)
-        .eq("role", "CUSTOMER")
-        .order("created_at", { ascending: false })
+      const [profilesResult, walletsResult] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select(`
+            id,
+            full_name,
+            phone,
+            role,
+            status,
+            created_at,
+            updated_at
+          `)
+          .eq("role", "CUSTOMER")
+          .order("created_at", { ascending: false }),
+        supabase.from("customer_bp_wallets").select("customer_id, balance"),
+      ])
 
-      if (error) {
-        throw error
+      if (profilesResult.error) {
+        throw profilesResult.error
       }
 
-      setCustomers((data || []).map(normalizeCustomer))
+      if (walletsResult.error) {
+        throw walletsResult.error
+      }
+
+      const balanceByCustomer = new Map((walletsResult.data || []).map((wallet) => [wallet.customer_id, Number(wallet.balance || 0)]))
+      setCustomers((profilesResult.data || []).map((profile) => ({
+        ...normalizeCustomer(profile),
+        balance: balanceByCustomer.get(profile.id) || 0,
+      })))
     } catch (error) {
       setCustomers([])
       setFetchError(error.message || "Unable to load customers from Supabase.")
@@ -277,24 +300,37 @@ function Customers() {
     }
   }, [profileView?.id])
 
-  const loadCustomer = ({ customerId, amount, reason }) => {
+  const loadCustomer = async ({ customerId, amount, reason }) => {
     const value = Number(amount)
     const customer = customers.find((item) => item.id === customerId)
+    const trimmedReason = String(reason || "").trim()
 
     if (!customer) return { ok: false, error: "Select a customer." }
-    if (!Number.isFinite(value) || value <= 0) {
-      return { ok: false, error: "Enter a valid amount greater than zero." }
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      return { ok: false, error: "Enter a whole-number amount greater than zero." }
     }
+    if (!trimmedReason) return { ok: false, error: "A reason is required for the audit record." }
 
-    setCustomers((current) =>
-      current.map((item) =>
-        item.id === customerId ? { ...item, balance: item.balance + value } : item
-      )
-    )
+    setSavingLoad(true)
 
-    return {
-      ok: true,
-      note: `Loaded ${value.toLocaleString()} BP to ${customer.name} for ${reason || "customer load"}.`,
+    try {
+      const { data, error } = await supabase.rpc("admin_load_customer_bp", {
+        p_customer_id: customerId,
+        p_amount: value,
+        p_reason: trimmedReason,
+      })
+
+      if (error) throw error
+
+      await fetchCustomers()
+      return {
+        ok: true,
+        note: `Loaded ${value.toLocaleString()} BP to ${customer.name}. New balance: ${Number(data?.customer_balance || 0).toLocaleString()} BP.`,
+      }
+    } catch (error) {
+      return { ok: false, error: error.message || "Unable to load BP to this customer." }
+    } finally {
+      setSavingLoad(false)
     }
   }
 
@@ -345,21 +381,23 @@ function Customers() {
     })
   }
 
-  const submitLoad = () => {
+  const submitLoad = async () => {
     const result = loadCustomer({
       customerId: selected.id,
       amount: loadForm.amount,
       reason: loadForm.reason,
     })
 
-    if (!result.ok) {
-      setToast({ message: result.error, tone: "error" })
+    const loadResult = await result
+
+    if (!loadResult.ok) {
+      setToast({ message: loadResult.error, tone: "error" })
       return
     }
 
     setSelected(null)
     setLoadForm({ amount: "", reason: "" })
-    setToast({ message: result.note || "BuzzPoints loaded.", tone: "success" })
+    setToast({ message: loadResult.note || "BuzzPoints loaded.", tone: "success" })
   }
 
   const openEditCustomer = (customer) => {
@@ -519,6 +557,7 @@ function Customers() {
                           setSelected(customer)
                           setLoadForm({ amount: "", reason: "" })
                         }}
+                        disabled={customer.status !== "ACTIVE"}
                         className="text-xs text-yellow-400"
                       >
                         Load BP
@@ -546,12 +585,13 @@ function Customers() {
 
       {selected && (
         <Modal title={`Load ${selected.name}`} onClose={() => setSelected(null)}>
-          <p className="text-sm text-gray-500">This operation updates the shared treasury and customer balance.</p>
+          <p className="text-sm text-gray-500">BP moves from the fixed 100,000-point treasury reserve into this customer wallet and is recorded in transactions and audit history.</p>
           <label className="mt-5 block text-sm text-gray-400">
             Amount
             <input
               type="number"
               min="1"
+              step="1"
               value={loadForm.amount}
               onChange={(event) => setLoadForm({ ...loadForm, amount: event.target.value })}
               className={inputClass}
@@ -563,14 +603,15 @@ function Customers() {
               value={loadForm.reason}
               onChange={(event) => setLoadForm({ ...loadForm, reason: event.target.value })}
               className={inputClass}
+              required
             />
           </label>
           <div className="mt-6 flex justify-end gap-3">
-            <button onClick={() => setSelected(null)} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-gray-300">
+            <button type="button" onClick={() => setSelected(null)} disabled={savingLoad} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-gray-300 disabled:opacity-50">
               Cancel
             </button>
-            <button onClick={submitLoad} className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-semibold text-black">
-              Confirm Load
+            <button type="button" onClick={submitLoad} disabled={savingLoad} className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-semibold text-black disabled:opacity-50">
+              {savingLoad ? "Loading..." : "Confirm Load"}
             </button>
           </div>
         </Modal>

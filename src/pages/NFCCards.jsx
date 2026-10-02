@@ -33,6 +33,9 @@ function NFCCards() {
   const [fetchError, setFetchError] = useState("")
   const [assignOpen, setAssignOpen] = useState(false)
   const [assignForm, setAssignForm] = useState({ customerId: "", cardCode: "", cardUid: "", reason: "" })
+  const [customerQuery, setCustomerQuery] = useState("")
+  const [customerSuggestionsOpen, setCustomerSuggestionsOpen] = useState(false)
+  const [activeCustomerSuggestion, setActiveCustomerSuggestion] = useState(-1)
   const [replaceOpen, setReplaceOpen] = useState(false)
   const [replaceCard, setReplaceCard] = useState(null)
   const [replaceForm, setReplaceForm] = useState({ cardCode: "", cardUid: "", reason: "" })
@@ -43,6 +46,34 @@ function NFCCards() {
   const [confirm, setConfirm] = useState(null)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState(null)
+
+  const assignedCustomerIds = new Set(cards.map((card) => card.customer_id).filter(Boolean))
+  const availableCustomers = customers.filter((customer) => !assignedCustomerIds.has(customer.id))
+  const normalizedCustomerQuery = customerQuery.trim().toLocaleLowerCase()
+  const customerSuggestions = normalizedCustomerQuery
+    ? availableCustomers
+      .filter((customer) => (customer.full_name || "Unnamed Customer").toLocaleLowerCase().includes(normalizedCustomerQuery))
+      .sort((first, second) => {
+        const firstName = (first.full_name || "Unnamed Customer").toLocaleLowerCase()
+        const secondName = (second.full_name || "Unnamed Customer").toLocaleLowerCase()
+        const firstStartsWithQuery = firstName.startsWith(normalizedCustomerQuery)
+        const secondStartsWithQuery = secondName.startsWith(normalizedCustomerQuery)
+
+        if (firstStartsWithQuery !== secondStartsWithQuery) {
+          return firstStartsWithQuery ? -1 : 1
+        }
+
+        return firstName.localeCompare(secondName)
+      })
+      .slice(0, 10)
+    : []
+
+  const selectAssignCustomer = (customer) => {
+    setAssignForm((currentForm) => ({ ...currentForm, customerId: customer.id }))
+    setCustomerQuery(customer.full_name || "Unnamed Customer")
+    setCustomerSuggestionsOpen(false)
+    setActiveCustomerSuggestion(-1)
+  }
 
   const openAssignModal = async () => {
     try {
@@ -65,6 +96,9 @@ function NFCCards() {
         cardUid: cardUidResult.data,
         reason: "",
       })
+      setCustomerQuery("")
+      setCustomerSuggestionsOpen(false)
+      setActiveCustomerSuggestion(-1)
       setAssignOpen(true)
     } catch (error) {
       setToast({
@@ -532,6 +566,9 @@ function NFCCards() {
                             cardUid: card.card_uid || "",
                             reason: "",
                           })
+                          setCustomerQuery(customers.find((customer) => customer.id === card.customer_id)?.full_name || "")
+                          setCustomerSuggestionsOpen(false)
+                          setActiveCustomerSuggestion(-1)
                           setAssignOpen(true)
                         }}
                         className="text-xs text-gray-400"
@@ -554,18 +591,68 @@ function NFCCards() {
           <form onSubmit={handleAssign} className="space-y-5">
             <label className="block text-sm text-gray-300">
               Customer
-              <select
-                value={assignForm.customerId}
-                onChange={(event) => setAssignForm({ ...assignForm, customerId: event.target.value })}
-                className={inputClass}
-              >
-                <option value="">Select customer</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.full_name || "Unnamed Customer"}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={customerQuery}
+                  onChange={(event) => {
+                    setCustomerQuery(event.target.value)
+                    setAssignForm((currentForm) => ({ ...currentForm, customerId: "" }))
+                    setCustomerSuggestionsOpen(true)
+                    setActiveCustomerSuggestion(-1)
+                  }}
+                  onFocus={() => setCustomerSuggestionsOpen(true)}
+                  onBlur={() => setCustomerSuggestionsOpen(false)}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowDown" && customerSuggestions.length > 0) {
+                      event.preventDefault()
+                      setCustomerSuggestionsOpen(true)
+                      setActiveCustomerSuggestion((current) => Math.min(current + 1, customerSuggestions.length - 1))
+                    } else if (event.key === "ArrowUp" && customerSuggestions.length > 0) {
+                      event.preventDefault()
+                      setActiveCustomerSuggestion((current) => Math.max(current - 1, 0))
+                    } else if (event.key === "Enter" && customerSuggestionsOpen && activeCustomerSuggestion >= 0) {
+                      event.preventDefault()
+                      selectAssignCustomer(customerSuggestions[activeCustomerSuggestion])
+                    } else if (event.key === "Escape") {
+                      setCustomerSuggestionsOpen(false)
+                    }
+                  }}
+                  className={inputClass}
+                  placeholder="Search unassigned customers..."
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-expanded={customerSuggestionsOpen && Boolean(normalizedCustomerQuery)}
+                  aria-controls="assign-customer-suggestions"
+                  aria-activedescendant={activeCustomerSuggestion >= 0 ? `assign-customer-option-${activeCustomerSuggestion}` : undefined}
+                  autoComplete="off"
+                />
+
+                {customerSuggestionsOpen && normalizedCustomerQuery && (
+                  <div
+                    id="assign-customer-suggestions"
+                    role="listbox"
+                    className="absolute left-0 right-0 z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-white/10 bg-[#080808] py-1 shadow-xl"
+                  >
+                    {customerSuggestions.length > 0 ? customerSuggestions.map((customer, index) => (
+                      <button
+                        key={customer.id}
+                        id={`assign-customer-option-${index}`}
+                        type="button"
+                        role="option"
+                        aria-selected={activeCustomerSuggestion === index}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => selectAssignCustomer(customer)}
+                        className={`block w-full px-3 py-2 text-left text-sm ${activeCustomerSuggestion === index ? "bg-yellow-400 text-black" : "text-gray-200 hover:bg-white/10"}`}
+                      >
+                        {customer.full_name || "Unnamed Customer"}
+                      </button>
+                    )) : (
+                      <p className="px-3 py-2 text-sm text-gray-500">No unassigned customers found.</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </label>
 
             <label className="block text-sm text-gray-300">

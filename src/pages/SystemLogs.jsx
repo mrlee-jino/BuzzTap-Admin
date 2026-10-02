@@ -120,6 +120,12 @@ const buildDescription = (log, details, actorNameOverride) => {
     return `Customer status changed from ${oldStatus || "UNKNOWN"} to ${newStatus || "UNKNOWN"}.`
   }
 
+  if (action.includes("CUSTOMER_BP_LOADED")) {
+    const amount = Number(pickDetail(detailsObject, ["amount"]) || 0).toLocaleString()
+    const newBalance = Number(pickDetail(detailsObject, ["new_balance"]) || 0).toLocaleString()
+    return `${customerName || targetLabel} received ${amount} BP from the treasury. New balance: ${newBalance} BP.`
+  }
+
   if (action.includes("CUSTOMER_PROFILE_UPDATED")) {
     return "Customer profile information was updated."
   }

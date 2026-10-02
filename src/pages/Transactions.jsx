@@ -95,7 +95,9 @@ function Transactions() {
 
       const normalizedTransactions = (data || []).map((transaction) => {
         const customerName = transaction.customer?.full_name || "Unknown Customer"
-        const businessName = transaction.business?.name || "Unknown Business"
+        const isCustomerLoad = String(transaction.transaction_type || "").toUpperCase() === "CUSTOMER_LOAD"
+        const isBusinessPurchase = String(transaction.transaction_type || "").toUpperCase() === "BUSINESS_PURCHASE"
+        const businessName = isCustomerLoad ? "BuzzTap Treasury" : transaction.business?.name || "Unknown Business"
         const cardCode = transaction.nfc_card?.card_code || "—"
         const dateTime = formatDateTime(transaction.created_at)
 
@@ -107,7 +109,7 @@ function Transactions() {
           amount: Number(transaction.amount_bp || 0),
           date: dateTime.date,
           time: dateTime.time,
-          method: transaction.nfc_card_id ? "NFC" : "—",
+          method: isCustomerLoad ? "BP Load" : isBusinessPurchase ? "BP Purchase" : transaction.nfc_card_id ? "NFC" : "—",
           status: normalizeTransactionStatus(transaction.status),
           type: transaction.transaction_type || "—",
           description: transaction.description || "",
@@ -195,7 +197,7 @@ function Transactions() {
     return matchesSearch && matchesStatus && matchesMethod
   })
 
-  const completedTransactions = records.filter((transaction) => transaction.status === "Completed")
+  const completedTransactions = records.filter((transaction) => transaction.status === "Completed" && !["CUSTOMER_LOAD", "BUSINESS_PURCHASE"].includes(transaction.type.toUpperCase()))
   const totalRevenue = completedTransactions.reduce((total, transaction) => {
     const createdAt = transaction.createdAt ? new Date(transaction.createdAt) : null
     const today = new Date()
