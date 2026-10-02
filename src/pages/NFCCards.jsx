@@ -44,6 +44,36 @@ function NFCCards() {
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState(null)
 
+  const openAssignModal = async () => {
+    try {
+      const [cardCodeResult, cardUidResult] = await Promise.all([
+        supabase.rpc("admin_generate_nfc_card_code"),
+        supabase.rpc("admin_generate_nfc_card_uid"),
+      ])
+
+      if (cardCodeResult.error) {
+        throw cardCodeResult.error
+      }
+
+      if (cardUidResult.error) {
+        throw cardUidResult.error
+      }
+
+      setAssignForm({
+        customerId: "",
+        cardCode: cardCodeResult.data,
+        cardUid: cardUidResult.data,
+        reason: "",
+      })
+      setAssignOpen(true)
+    } catch (error) {
+      setToast({
+        message: error.message || "Unable to generate an NFC card code.",
+        tone: "error",
+      })
+    }
+  }
+
   const loadCustomers = async () => {
     const { data, error } = await supabase
       .from("profiles")
@@ -306,6 +336,21 @@ function NFCCards() {
       await fetchCards()
       setToast({ message: "NFC card assigned successfully.", tone: "success" })
     } catch (error) {
+      const errorDetails = `${error.message || ""} ${error.details || ""} ${error.hint || ""}`.toLowerCase()
+
+      if (error.code === "23505" && errorDetails.includes("card_uid")) {
+        const { data: nextCardUid, error: uidError } = await supabase.rpc("admin_generate_nfc_card_uid")
+
+        if (!uidError && nextCardUid) {
+          setAssignForm((currentForm) => ({ ...currentForm, cardUid: nextCardUid }))
+          setToast({
+            message: "That UID was assigned to another card. A new UID is ready; submit again.",
+            tone: "error",
+          })
+          return
+        }
+      }
+
       setToast({
         message: error.message || "Unable to assign NFC card.",
         tone: "error",
@@ -328,10 +373,7 @@ function NFCCards() {
 
         <button
           type="button"
-          onClick={() => {
-            setAssignForm({ customerId: "", cardCode: "", cardUid: "", reason: "" })
-            setAssignOpen(true)
-          }}
+          onClick={openAssignModal}
           className="rounded-xl bg-yellow-400 px-5 py-3 font-semibold text-black"
         >
           + Assign NFC Card
@@ -531,9 +573,10 @@ function NFCCards() {
               <input
                 type="text"
                 value={assignForm.cardCode}
-                onChange={(event) => setAssignForm({ ...assignForm, cardCode: event.target.value })}
                 className={inputClass}
+                readOnly
               />
+              <span className="mt-1 block text-xs text-gray-500">System-generated 16-digit BuzzTap card code.</span>
             </label>
 
             <label className="block text-sm text-gray-300">
@@ -541,9 +584,10 @@ function NFCCards() {
               <input
                 type="text"
                 value={assignForm.cardUid}
-                onChange={(event) => setAssignForm({ ...assignForm, cardUid: event.target.value })}
                 className={inputClass}
+                readOnly
               />
+              <span className="mt-1 block text-xs text-gray-500">Daily format: DDMM-YYYY-XXXX.</span>
             </label>
 
             <label className="block text-sm text-gray-300">
