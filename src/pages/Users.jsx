@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "../lib/supabaseClient"
 import Modal from "../components/Modal"
-import Toast from "../components/Toast"
 import DropdownMenu from "../components/DropdownMenu"
-import ConfirmModal from "../components/ConfirmModal"
 
 function formatRole(role) {
   const roles = {
@@ -35,9 +33,6 @@ function Users() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("All")
   const [modal, setModal] = useState(null)
-  const [form, setForm] = useState({ name: "", email: "", business: "", role: "Business Staff", status: "Pending" })
-  const [toast, setToast] = useState("")
-  const [confirm, setConfirm] = useState(null)
 
   const filteredUsers = records.filter((user) => {
     const matchesSearch =
@@ -136,8 +131,8 @@ async function loadUsers() {
           </p>
         </div>
 
-        <button onClick={() => setModal("add")} className="rounded-xl bg-yellow-400 px-6 py-3 font-semibold text-black transition hover:bg-yellow-300 hover:shadow-[0_0_25px_rgba(250,204,21,0.25)]">
-          + Add User
+        <button type="button" disabled title="User provisioning is not connected to a secure backend yet." className="cursor-not-allowed rounded-xl border border-white/10 px-6 py-3 font-semibold text-gray-500">
+          Add User Unavailable
         </button>
 
       </div>
@@ -411,7 +406,7 @@ async function loadUsers() {
                     <button onClick={() => setModal({ type: "menu", user })} className="text-xl text-gray-500 transition hover:text-yellow-400" aria-label={`Actions for ${user.name}`}>
                       ⋮
                     </button>
-                    {modal?.type === "menu" && modal.user.id === user.id && <DropdownMenu options={[{ label: "View Profile", onClick: () => setModal({ type: "profile", user }) }, { label: "Edit", onClick: () => { setForm({ name: user.name, email: user.email, business: user.business, role: user.role, status: user.status, originalId: user.id }); setModal({ type: "edit" }) } }, user.status === "Suspended" ? { label: "Activate", onClick: () => setConfirm({ user, status: "Active" }) } : { label: "Deactivate", onClick: () => setConfirm({ user, status: "Suspended" }), destructive: true }]} onSelect={(option) => { option.onClick(); if (option.label !== "View Profile") setModal(null) }} />}
+                    {modal?.type === "menu" && modal.user.id === user.id && <DropdownMenu options={[{ label: "View Profile", onClick: () => setModal({ type: "profile", user }) }]} onSelect={(option) => option.onClick()} />}
 
                   </td>
 
@@ -433,9 +428,7 @@ async function loadUsers() {
 
       </div>
 
-      {(modal === "add" || modal === "edit") && <Modal title={modal === "add" ? "Add User" : "Edit User"} onClose={() => setModal(null)}><form onSubmit={(event) => { event.preventDefault(); if (!form.name.trim() || !form.email.includes("@") || !form.business.trim()) { setToast("Please complete all required fields."); return } if (modal === "edit") { setRecords((current) => current.map((item) => item.id === form.originalId ? { ...item, ...form } : item)); setToast("User updated successfully.") } else { setRecords((current) => [{ ...form, id: `USR-${String(current.length + 1).padStart(3, "0")}`, lastActive: "Never", joined: "Today" }, ...current]); setToast("User added successfully.") } setModal(null) }} className="space-y-4"><input required placeholder="Full Name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="field" /><input required type="email" placeholder="Email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} className="field" /><input required placeholder="Business" value={form.business} onChange={(event) => setForm({ ...form, business: event.target.value })} className="field" /><select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })} className="field"><option>Business Staff</option><option>Business Owner</option><option>Platform Admin</option></select><select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} className="field"><option>Active</option><option>Pending</option><option>Suspended</option></select><div className="flex justify-end gap-3"><button type="button" onClick={() => setModal(null)} className="rounded-xl border border-white/10 px-5 py-3 text-sm text-gray-300">Cancel</button><button className="rounded-xl bg-yellow-400 px-5 py-3 font-semibold text-black">{modal === "add" ? "Add User" : "Save User"}</button></div></form></Modal>}
       {modal?.type === "profile" && <Modal title="User Profile" onClose={() => setModal(null)}><p className="text-lg font-semibold">{modal.user.name}</p><p className="mt-2 text-gray-400">{modal.user.email} · {modal.user.role}</p></Modal>}
-      {confirm && <ConfirmModal title={`${confirm.status} user?`} description={`This will change ${confirm.user.name}'s access.`} confirmLabel={confirm.status} destructive={confirm.status === "Suspended"} onConfirm={() => { setRecords((current) => current.map((item) => item.id === confirm.user.id ? { ...item, status: confirm.status } : item)); setConfirm(null); setToast(`User ${confirm.status.toLowerCase()}`) }} onClose={() => setConfirm(null)} />}{toast && <Toast message={toast} onClose={() => setToast("")} />}
 
     </div>
   )

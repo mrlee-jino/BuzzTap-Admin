@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react"
 import Modal from "../components/Modal"
 import Toast from "../components/Toast"
-import DropdownMenu from "../components/DropdownMenu"
-import ConfirmModal from "../components/ConfirmModal"
 import { supabase } from "../lib/supabaseClient"
 
 const formatDisplayDate = (value) => {
@@ -55,7 +53,6 @@ function Businesses() {
   const [businesses, setBusinesses] = useState([])
   const [filter, setFilter] = useState("All")
   const [search, setSearch] = useState("")
-  const [openMenuId, setOpenMenuId] = useState(null)
   const [selectedBusiness, setSelectedBusiness] = useState(null)
   const [businessMembers, setBusinessMembers] = useState([])
   const [wallets, setWallets] = useState([])
@@ -66,7 +63,6 @@ function Businesses() {
   const [sendingMessage, setSendingMessage] = useState(false)
   const [supabaseError, setSupabaseError] = useState("")
   const [toast, setToast] = useState("")
-  const [confirm, setConfirm] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -155,11 +151,6 @@ function Businesses() {
     const query = search.toLowerCase()
     return (filter === "All" || business.status === filter) && [business.name, business.location, business.type, business.owner].some((value) => value.toLowerCase().includes(query))
   })
-  const changeStatus = () => { setBusinesses((current) => current.map((item) => item.name === confirm.business.name ? { ...item, status: confirm.status } : item)); setToast(`Business ${confirm.status.toLowerCase()}`); setConfirm(null) }
-  const actionOptions = (business) => [
-    business.status === "Suspended" ? { label: "Activate", onClick: () => setConfirm({ business, status: "Active" }) } : { label: "Suspend", onClick: () => setConfirm({ business, status: "Suspended" }), destructive: true },
-  ]
-
   const sendBusinessMessage = async (event) => {
     event.preventDefault()
     if (!selectedBusiness?.id || !messageTitle.trim() || !messageBody.trim()) return
@@ -315,7 +306,7 @@ function Businesses() {
 
                   <div>
 
-                    <button type="button" onClick={() => { setSelectedBusiness(business); setOpenMenuId(null); setDetailLoading(true); setDetailError(""); setBusinessMembers([]); setWallets([]); setMessageTitle(""); setMessageBody("") }} className="text-left font-medium text-white hover:text-yellow-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400">
+                    <button type="button" onClick={() => { setSelectedBusiness(business); setDetailLoading(true); setDetailError(""); setBusinessMembers([]); setWallets([]); setMessageTitle(""); setMessageBody("") }} className="text-left font-medium text-white hover:text-yellow-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400">
                       {business.name}
                     </button>
 
@@ -371,13 +362,7 @@ function Businesses() {
 
 
                 {/* Action */}
-                <div className="flex justify-start md:justify-end">
-
-                  <div className="relative"><button onClick={() => setOpenMenuId(openMenuId === business.id ? null : business.id)} className="rounded-lg px-3 py-2 text-gray-500 transition hover:bg-white/5 hover:text-yellow-400" aria-label={`Actions for ${business.name}`}>
-                    ⋮
-                  </button>{openMenuId === business.id && <DropdownMenu options={actionOptions(business)} onSelect={(option) => { option.onClick(); setOpenMenuId(null) }} />}</div>
-
-                </div>
+                <div className="text-xs text-gray-600 md:text-right">Status changes unavailable</div>
 
               </div>
 
@@ -474,7 +459,6 @@ function Businesses() {
           </div>
         </Modal>
       )}
-      {confirm && <ConfirmModal title={`${confirm.status} business?`} description={`This will change ${confirm.business.name} to ${confirm.status}.`} confirmLabel={confirm.status} destructive={confirm.status === "Suspended"} onConfirm={changeStatus} onClose={() => setConfirm(null)} />}
       {toast && <Toast message={toast} onClose={() => setToast("")} />}
 
     </div>

@@ -1,16 +1,44 @@
-# React + Vite
+# BuzzTap Admin
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React and Vite admin interface backed by Supabase.
 
-Currently, two official plugins are available:
+## Local Development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Install Node.js and npm.
+2. Copy `.env.example` to `.env.local` and set the Supabase project URL and publishable key.
+3. Install dependencies with `npm install`.
+4. Start the local server with `npm run dev`.
 
-## React Compiler
+Required client environment variables:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
 
-## Expanding the ESLint configuration
+Only use the Supabase publishable/anon key in this browser application. Never put a service-role key in a `VITE_*` variable.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Verification
+
+- `npm run lint`
+- `npm run build`
+
+The production bundle is written to `dist/`. The repository does not currently have an automated test suite.
+
+## Supabase Prerequisites
+
+The SQL files in `supabase/migrations/` are incremental feature migrations, not a complete initial database schema. They depend on existing BuzzTap tables, constraints, helper functions, and policies. Before deployment:
+
+1. Provision the complete baseline schema and required functions in a staging Supabase project.
+2. Apply migrations in timestamp order and verify each succeeds.
+3. Verify row-level security and admin checks for every table and RPC used by the app, including denial for non-admin and inactive accounts.
+4. Create and verify an active `ADMIN` profile for each administrator.
+5. Configure Supabase Auth site URL, redirect URLs, email delivery, and recovery flows for the production domain.
+6. Test treasury and purchase-request operations against staging data, including failed, repeated, and concurrent requests.
+
+## Deployment Checklist
+
+- Configure the two required environment variables in the hosting provider. These values are bundled into the public client; keep all privileged credentials server-side.
+- Configure SPA history fallback so direct navigation to routes such as `/customers` serves `index.html`.
+- Use a staging deployment to verify login, permissions, database reads/writes, exports, and mobile layouts before production.
+- Configure backups, monitoring, and a rollback procedure.
+- Do not treat the disabled user-management and Settings controls as operational. Business status management, user provisioning, platform settings, 2FA setup, and maintenance mode need secure persisted backend implementations.
+- Business purchase approvals credit BP from the treasury reserve; independently verify payment before approving. No payment processor is integrated.

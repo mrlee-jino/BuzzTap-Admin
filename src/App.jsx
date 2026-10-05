@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useState } from "react"
 import {
   BrowserRouter,
   Navigate,
@@ -7,46 +7,74 @@ import {
   useLocation,
 } from "react-router-dom"
 
-import Login from "./pages/Login"
 import Sidebar from "./components/Sidebar"
 
-import Dashboard from "./pages/Dashboard"
-import Businesses from "./pages/Businesses"
-import NFCCards from "./pages/NFCCards"
-import Transactions from "./pages/Transactions"
-import Users from "./pages/Users"
-import Reports from "./pages/Reports"
-import SystemLogs from "./pages/SystemLogs"
-import Settings from "./pages/Settings"
-import BuzzPointTreasury from "./pages/BuzzPointTreasury"
-import Customers from "./pages/Customers"
-import ContentManagement from "./pages/ContentManagement"
-import { AdminDataProvider } from "./context/AdminDataContext"
+const Login = lazy(() => import("./pages/Login"))
+const Dashboard = lazy(() => import("./pages/Dashboard"))
+const Businesses = lazy(() => import("./pages/Businesses"))
+const NFCCards = lazy(() => import("./pages/NFCCards"))
+const Transactions = lazy(() => import("./pages/Transactions"))
+const Users = lazy(() => import("./pages/Users"))
+const Reports = lazy(() => import("./pages/Reports"))
+const SystemLogs = lazy(() => import("./pages/SystemLogs"))
+const Settings = lazy(() => import("./pages/Settings"))
+const BuzzPointTreasury = lazy(() => import("./pages/BuzzPointTreasury"))
+const Customers = lazy(() => import("./pages/Customers"))
+const ContentManagement = lazy(() => import("./pages/ContentManagement"))
 import { supabase } from "./lib/supabaseClient"
 
 function ProtectedRoute({ children }) {
-  const [checkingSession, setCheckingSession] = useState(true)
-  const [session, setSession] = useState(null)
+  const [checkingAuthorization, setCheckingAuthorization] = useState(true)
+  const [isAuthorized, setIsAuthorized] = useState(false)
 
   useEffect(() => {
     let mounted = true
+    let validationId = 0
+
+    const verifyAdmin = async (session) => {
+      const currentValidationId = ++validationId
+
+      if (!session?.user?.id) {
+        if (mounted) {
+          setIsAuthorized(false)
+          setCheckingAuthorization(false)
+        }
+        return
+      }
+
+      try {
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("role, status")
+          .eq("id", session.user.id)
+          .single()
+
+        if (!mounted || currentValidationId !== validationId) return
+
+        setIsAuthorized(!error && profile?.role === "ADMIN" && profile?.status === "ACTIVE")
+      } catch {
+        if (!mounted || currentValidationId !== validationId) return
+        setIsAuthorized(false)
+      } finally {
+        if (mounted && currentValidationId === validationId) {
+          setCheckingAuthorization(false)
+        }
+      }
+    }
 
     supabase.auth.getSession().then(({ data }) => {
-      if (mounted) {
-        setSession(data.session)
-        setCheckingSession(false)
-      }
+      if (mounted) verifyAdmin(data.session)
     }).catch(() => {
       if (mounted) {
-        setSession(null)
-        setCheckingSession(false)
+        setIsAuthorized(false)
+        setCheckingAuthorization(false)
       }
     })
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (mounted) {
-        setSession(nextSession)
-        setCheckingSession(false)
+        setCheckingAuthorization(true)
+        window.setTimeout(() => verifyAdmin(nextSession), 0)
       }
     })
 
@@ -56,11 +84,11 @@ function ProtectedRoute({ children }) {
     }
   }, [])
 
-  if (checkingSession) {
+  if (checkingAuthorization) {
     return <div className="flex min-h-screen items-center justify-center text-sm text-gray-400">Checking session...</div>
   }
 
-  return session ? children : <Navigate to="/login" replace />
+  return isAuthorized ? children : <Navigate to="/login" replace />
 }
 
 
@@ -110,6 +138,7 @@ function AppLayout() {
           }
         >
 
+          <Suspense fallback={<div className="flex min-h-[50vh] items-center justify-center text-sm text-gray-400">Loading page...</div>}>
           <Routes>
             
 
@@ -173,6 +202,7 @@ function AppLayout() {
             <Route path="*" element={<Navigate to="/" replace />} />
 
           </Routes>
+          </Suspense>
 
         </div>
 
@@ -185,11 +215,9 @@ function AppLayout() {
 
 function App() {
   return (
-    <AdminDataProvider>
-      <BrowserRouter>
-        <AppLayout />
-      </BrowserRouter>
-    </AdminDataProvider>
+    <BrowserRouter>
+      <AppLayout />
+    </BrowserRouter>
   )
 }
 
