@@ -31,6 +31,7 @@ function ContentManagement() {
   const [type, setType] = useState("All")
   const [status, setStatus] = useState("All")
   const [showAllSubmissions, setShowAllSubmissions] = useState(false)
+  const [submissionSource, setSubmissionSource] = useState("all")
   const [rejectItem, setRejectItem] = useState(null)
   const [reason, setReason] = useState("")
   const [workingId, setWorkingId] = useState(null)
@@ -101,9 +102,19 @@ function ContentManagement() {
       const matchesStatus = status === "All" || itemStatus === status
       const matchesType = type === "All" || item.type === type
       const matchesSearch = !query || `${item.title || ""} ${businessNames[item.business_id] || ""} ${item.business_id || ""} ${item.id}`.toLowerCase().includes(query)
-      return matchesStatus && matchesType && matchesSearch
+      const matchesSource = submissionSource === "all"
+        || (submissionSource === "businesses" && Boolean(item.business_id))
+        || (submissionSource === "admin" && !item.business_id)
+        || submissionSource === `business:${item.business_id}`
+      return matchesStatus && matchesType && matchesSearch && matchesSource
     })
-  }, [businessNames, contentItems, search, status, type])
+  }, [businessNames, contentItems, search, status, type, submissionSource])
+
+  const submissionBusinesses = [...new Set([
+    ...Object.keys(businessNames),
+    ...contentItems.map((item) => item.business_id).filter(Boolean),
+  ])].map((id) => ({ id, name: businessNames[id] || `Business (${id})` }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   const visibleItems = showAllSubmissions ? filteredItems : filteredItems.slice(0, 10)
   const previewItems = filterPreviewPosts(contentItems, previewView, today)
@@ -234,12 +245,27 @@ function ContentManagement() {
 
       <div className="grid items-start gap-5 2xl:grid-cols-[minmax(360px,0.85fr)_minmax(680px,1.15fr)]">
         <section className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-[#111111]" aria-label="Submitted content">
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
             <div>
               <h2 className="font-semibold">Submissions</h2>
               <p className="mt-1 text-xs text-gray-500">{filteredItems.length} matching posts</p>
             </div>
-            {status === "SUBMITTED" && <span className="rounded-full bg-yellow-400/10 px-3 py-1 text-xs font-medium text-yellow-300">Awaiting review</span>}
+            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
+              {status === "SUBMITTED" && <span className="rounded-full bg-yellow-400/10 px-3 py-1 text-xs font-medium text-yellow-300">Awaiting review</span>}
+              <select
+                value={submissionSource}
+                onChange={(event) => { setSubmissionSource(event.target.value); setShowAllSubmissions(false) }}
+                aria-label="Filter submissions by business or admin"
+                className="min-w-0 max-w-full rounded-lg border border-white/10 bg-[#080808] px-3 py-2 text-sm outline-none focus:border-yellow-400"
+              >
+                <option value="all">All businesses / Admin</option>
+                <option value="businesses">All businesses</option>
+                <option value="admin">BuzzTap Admin</option>
+                <optgroup label="Businesses">
+                  {submissionBusinesses.map((business) => <option key={business.id} value={`business:${business.id}`}>{business.name}</option>)}
+                </optgroup>
+              </select>
+            </div>
           </div>
 
           {loading ? (
