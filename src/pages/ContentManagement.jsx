@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../lib/supabaseClient"
 import Modal from "../components/Modal"
 import Toast from "../components/Toast"
+import { filterPreviewPosts, localCalendarDate, previewStatus } from "../lib/postPreview"
 
 const types = ["UPDATE", "EVENT", "PROMOTION", "ADVERTISEMENT"]
 const statuses = ["SUBMITTED", "PUBLISHED", "DRAFT", "REJECTED", "ARCHIVED", "EXPIRED"]
@@ -36,6 +37,19 @@ function ContentManagement() {
   const [adminPost, setAdminPost] = useState(emptyAdminPost)
   const [publishing, setPublishing] = useState(false)
   const [toast, setToast] = useState(null)
+  const [previewView, setPreviewView] = useState("running")
+  const [today, setToday] = useState(localCalendarDate)
+
+  useEffect(() => {
+    // Refresh the derived view when an open page crosses local midnight.
+    const refreshDate = () => setToday(localCalendarDate())
+    const timer = window.setInterval(refreshDate, 60_000)
+    window.addEventListener("focus", refreshDate)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener("focus", refreshDate)
+    }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -92,7 +106,8 @@ function ContentManagement() {
   }, [businessNames, contentItems, search, status, type])
 
   const visibleItems = showAllSubmissions ? filteredItems : filteredItems.slice(0, 10)
-  const approvedItems = contentItems.filter((item) => (item.status || "").toUpperCase() === "PUBLISHED")
+  const previewItems = filterPreviewPosts(contentItems, previewView, today)
+  const previewTitle = previewView === "running" ? "Running Posts" : "Archive"
 
   async function moderateContent(item, nextStatus, rejectionReason = "") {
     setWorkingId(item.id)
@@ -298,12 +313,28 @@ function ContentManagement() {
 
         <div className="grid items-start gap-5 xl:grid-cols-[minmax(280px,0.85fr)_minmax(300px,1.15fr)]">
         <aside className="rounded-xl border border-white/10 bg-[#111111] p-4" aria-label="Business post feed preview">
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="font-semibold">Post preview</h2>
-              <p className="mt-1 text-xs text-gray-500">Approved posts | {approvedItems.length} posts</p>
+              <p className="mt-1 text-xs text-gray-500" aria-live="polite">{previewTitle} | {previewItems.length} posts</p>
             </div>
             <span className="text-xs text-gray-500">Scroll feed</span>
+          </div>
+
+          <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Post preview view">
+            {[["running", "Running Posts"], ["archive", "Archive"]].map(([view, label]) => (
+              <button
+                key={view}
+                type="button"
+                aria-pressed={previewView === view}
+                onClick={() => { setPreviewView(view); setToday(localCalendarDate()) }}
+                className={`min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-400 ${previewView === view
+                  ? "border-yellow-400 bg-yellow-400 text-black hover:bg-yellow-300"
+                  : "border-white/10 bg-[#080808] text-gray-300 hover:bg-white/5"}`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
           <div className="mx-auto w-full max-w-[340px] rounded-[2rem] border-[7px] border-[#252525] bg-[#252525] p-1.5 shadow-xl">
@@ -313,7 +344,7 @@ function ContentManagement() {
                 <span className="text-xs font-medium text-gray-500">Business posts</span>
               </div>
               <div className="h-[570px] space-y-3 overflow-y-auto overscroll-contain p-2" aria-label="Scrollable customer feed">
-                {approvedItems.map((item) => {
+                {previewItems.map((item) => {
                   const mediaUrl = item.media_url || ""
                   const business = businessLabel(item)
                   return (
@@ -322,7 +353,7 @@ function ContentManagement() {
                         <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-yellow-400 text-sm font-bold text-black" aria-hidden="true">{business.slice(0, 1).toUpperCase()}</div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold">{business}</p>
-                          <p className="text-xs text-gray-500">{formatDate(item.created_at)} | {statusLabel(item.status || "")}</p>
+                          <p className="text-xs text-gray-500">{formatDate(item.created_at)} | {previewStatus(item, today) === "EXPIRED" ? "Expired" : statusLabel(item.status || "")}</p>
                         </div>
                         <span className="text-lg leading-none text-gray-500" aria-hidden="true">...</span>
                       </div>
@@ -349,7 +380,7 @@ function ContentManagement() {
                     </article>
                   )
                 })}
-                {!loading && approvedItems.length === 0 && <p className="rounded-lg bg-white px-4 py-8 text-center text-sm text-gray-500">No approved posts to preview yet.</p>}
+                {!loading && previewItems.length === 0 && <p className="rounded-lg bg-white px-4 py-8 text-center text-sm text-gray-500">{previewView === "running" ? "No running posts to preview yet." : "No archived or expired posts to preview yet."}</p>}
               </div>
             </div>
           </div>
