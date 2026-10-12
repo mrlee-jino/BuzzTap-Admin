@@ -47,6 +47,7 @@ function Transactions() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("All")
   const [methodFilter, setMethodFilter] = useState("All")
+  const [directionFilter, setDirectionFilter] = useState("All")
   const [menuId, setMenuId] = useState(null)
   const [selected, setSelected] = useState(null)
   const [toast, setToast] = useState("")
@@ -97,6 +98,8 @@ function Transactions() {
         const customerName = transaction.customer?.full_name || "Unknown Customer"
         const isCustomerLoad = String(transaction.transaction_type || "").toUpperCase() === "CUSTOMER_LOAD"
         const isBusinessPurchase = String(transaction.transaction_type || "").toUpperCase() === "BUSINESS_PURCHASE"
+        const isBusinessShare = String(transaction.transaction_code || "").toUpperCase().startsWith("BPSHARED-")
+          || String(transaction.transaction_type || "").toUpperCase() === "BUSINESS_TO_CUSTOMER"
         const businessName = isCustomerLoad ? "BuzzTap Treasury" : transaction.business?.name || "Unknown Business"
         const cardCode = transaction.nfc_card?.card_code || "—"
         const dateTime = formatDateTime(transaction.created_at)
@@ -112,6 +115,7 @@ function Transactions() {
           method: isCustomerLoad ? "BP Load" : isBusinessPurchase ? "BP Purchase" : transaction.nfc_card_id ? "NFC" : "—",
           status: normalizeTransactionStatus(transaction.status),
           type: transaction.transaction_type || "—",
+          direction: isBusinessPurchase ? "Business to Admin" : isCustomerLoad ? "Customer to Admin" : isBusinessShare ? "Business to Customer" : "Other",
           description: transaction.description || "",
           createdAt: transaction.created_at,
         }
@@ -193,8 +197,9 @@ function Transactions() {
     const matchesSearch = searchValue.includes(search.toLowerCase())
     const matchesStatus = statusFilter === "All" || transaction.status === statusFilter
     const matchesMethod = methodFilter === "All" || transaction.method === methodFilter
+    const matchesDirection = directionFilter === "All" || transaction.direction === directionFilter
 
-    return matchesSearch && matchesStatus && matchesMethod
+    return matchesSearch && matchesStatus && matchesMethod && matchesDirection
   })
 
   const completedTransactions = records.filter((transaction) => transaction.status === "Completed" && !["CUSTOMER_LOAD", "BUSINESS_PURCHASE"].includes(transaction.type.toUpperCase()))
@@ -323,7 +328,8 @@ function Transactions() {
       {/* Transactions Table */}
       <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#111111]">
 
-        <div className="border-b border-white/10 px-6 py-5">
+        <div className="flex flex-col gap-4 border-b border-white/10 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
           <h2 className="font-semibold">
             Recent Transactions
           </h2>
@@ -331,6 +337,20 @@ function Transactions() {
           <p className="mt-1 text-sm text-gray-500">
             Latest payment activity across the BuzzTap platform.
           </p>
+          </div>
+          <label className="flex flex-col gap-2 text-xs text-gray-500">
+            Transaction direction
+            <select
+              value={directionFilter}
+              onChange={(event) => { setDirectionFilter(event.target.value); setMenuId(null) }}
+              className="rounded-xl border border-white/10 bg-[#080808] px-3 py-2.5 text-sm text-white outline-none focus:border-yellow-400"
+            >
+              <option value="All">All transactions</option>
+              <option value="Business to Admin">Business to Admin</option>
+              <option value="Business to Customer">Business to Customer</option>
+              <option value="Customer to Admin">Customer to Admin</option>
+            </select>
+          </label>
         </div>
 
         <div className="overflow-x-auto">
