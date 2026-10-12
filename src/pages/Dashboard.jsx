@@ -12,6 +12,12 @@ const formatDate = (value) => {
 }
 
 const formatCount = (value) => value == null ? "—" : Number(value).toLocaleString()
+const formatJoinedDate = (value) => {
+  const date = value ? new Date(value) : null
+  return !date || Number.isNaN(date.getTime())
+    ? "N/A"
+    : new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date)
+}
 const formatStatus = (value) => String(value || "Unknown").replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (character) => character.toUpperCase())
 const relationName = (value) => Array.isArray(value) ? value[0]?.name || value[0]?.full_name : value?.name || value?.full_name
 
@@ -34,7 +40,7 @@ function Dashboard() {
     purchaseRequestCount: null,
     recentBusinesses: [],
     recentTransactions: [],
-    pendingContent: [],
+    recentContent: [],
     recentPurchaseRequests: [],
     recentAuditLogs: [],
   })
@@ -49,7 +55,7 @@ function Dashboard() {
     const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
 
     const queries = [
-      ["businesses", supabase.from("businesses").select("id, name, status, created_at", { count: "exact" }).order("created_at", { ascending: false }).limit(5)],
+      ["businesses", supabase.from("businesses").select("*", { count: "exact" }).order("created_at", { ascending: false }).limit(5)],
       ["activeBusinesses", supabase.from("businesses").select("id", { count: "exact", head: true }).eq("status", "ACTIVE")],
       ["pendingBusinesses", supabase.from("businesses").select("id", { count: "exact", head: true }).eq("status", "PENDING")],
       ["customers", supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "CUSTOMER")],
@@ -61,7 +67,8 @@ function Dashboard() {
       ["transactions", supabase.from("transactions").select("id, transaction_code, transaction_type, status, amount_bp, created_at, customer:profiles!transactions_customer_id_fkey(full_name), business:businesses!transactions_business_id_fkey(name)", { count: "exact" }).order("created_at", { ascending: false }).limit(6)],
       ["todayTransactions", supabase.from("transactions").select("id", { count: "exact", head: true }).gte("created_at", todayStart).lt("created_at", tomorrowStart)],
       ["pendingTransactions", supabase.from("transactions").select("id", { count: "exact", head: true }).eq("status", "PENDING")],
-      ["pendingContent", supabase.from("content_items").select("id, title, status, created_at, business:businesses(name)", { count: "exact" }).in("status", ["SUBMITTED", "PENDING_REVIEW", "PENDING"]).order("created_at", { ascending: false }).limit(5)],
+      ["pendingContent", supabase.from("content_items").select("id", { count: "exact", head: true }).in("status", ["SUBMITTED", "PENDING_REVIEW", "PENDING"])],
+      ["recentContent", supabase.from("content_items").select("id, business_id, title, type, status, created_at, business:businesses(name)").order("created_at", { ascending: false }).limit(5)],
       ["purchaseRequests", supabase.from("purchase_requests").select("id, amount, status, created_at, business:businesses(name)", { count: "exact" }).order("created_at", { ascending: false }).limit(5)],
       ["auditLogs", supabase.from("audit_logs").select("id, action, target_type, target_id, created_at").order("created_at", { ascending: false }).limit(6)],
     ]
@@ -102,7 +109,7 @@ function Dashboard() {
           purchaseRequestCount: count("purchaseRequests"),
           recentBusinesses: rows("businesses"),
           recentTransactions: rows("transactions"),
-          pendingContent: rows("pendingContent"),
+          recentContent: rows("recentContent"),
           recentPurchaseRequests: rows("purchaseRequests"),
           recentAuditLogs: rows("auditLogs"),
         })
@@ -181,7 +188,7 @@ function Dashboard() {
       <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-3">
 
         {/* Recent Businesses */}
-        <div className="xl:col-span-2 rounded-2xl border border-white/10 bg-[#111111]">
+        <div className="min-w-0 overflow-hidden xl:col-span-2 rounded-2xl border border-white/10 bg-[#111111]">
 
           <div className="flex items-center justify-between border-b border-white/10 p-6">
 
@@ -201,47 +208,49 @@ function Dashboard() {
 
           </div>
 
-          <div className="divide-y divide-white/5">
-
-            {recentBusinesses.length === 0 ? <p className="p-6 text-sm text-gray-500">{loading ? "Loading businesses..." : "No business records found."}</p> : recentBusinesses.map((business) => (
-
-              <button type="button" onClick={() => navigate("/businesses")}
-                key={business.id}
-                className="flex items-center justify-between p-5 transition hover:bg-white/[0.02]"
-              >
-
-                <div>
-                  <p className="font-medium">
-                    {business.name}
-                  </p>
-
-                  <p className="mt-1 text-sm text-gray-500">
-                    {business.business_type || "Business"}
-                  </p>
-                </div>
-
-                <div className="text-right">
-
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs ${
-                      String(business.status).toUpperCase() === "ACTIVE"
-                        ? "bg-yellow-400/10 text-yellow-400"
-                        : "bg-orange-400/10 text-orange-400"
-                    }`}
-                  >
-                    {formatStatus(business.status)}
-                  </span>
-
-                  <p className="mt-2 text-xs text-gray-600">
-                    {formatDate(business.created_at)}
-                  </p>
-
-                </div>
-
-              </button>
-
-            ))}
-
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] table-fixed text-left text-sm">
+              <thead className="border-b border-white/10 text-xs uppercase tracking-wider text-gray-600">
+                <tr>
+                  <th scope="col" className="w-[38%] px-6 py-4 font-normal">Business</th>
+                  <th scope="col" className="w-[22%] px-3 py-4 font-normal">Type</th>
+                  <th scope="col" className="w-[24%] px-3 py-4 font-normal">Location</th>
+                  <th scope="col" className="w-[16%] py-4 pr-6 font-normal">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {recentBusinesses.map((business) => (
+                  <tr key={business.id} className="transition hover:bg-white/[0.02]">
+                    <td className="px-6 py-5">
+                      <div className="flex items-center gap-3">
+                        <div aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-400/10 font-bold text-yellow-400">B</div>
+                        <div className="min-w-0">
+                          <button type="button" onClick={() => navigate("/businesses")} className="break-words text-left font-medium text-white hover:text-yellow-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400">
+                            {business.name || "Unnamed Business"}
+                          </button>
+                          <p className="mt-1 text-xs text-gray-600">Joined {formatJoinedDate(business.created_at)}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="break-words px-3 py-5 text-gray-400">{business.business_type || business.type || "Unknown"}</td>
+                    <td className="break-words px-3 py-5 text-gray-500">{business.address || business.location || "N/A"}</td>
+                    <td className="py-5 pr-6">
+                      <span className={`inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${
+                        String(business.status).toUpperCase() === "ACTIVE"
+                          ? "bg-yellow-400/10 text-yellow-400"
+                          : String(business.status).toUpperCase() === "PENDING"
+                          ? "bg-orange-400/10 text-orange-400"
+                          : "bg-red-400/10 text-red-400"
+                      }`}>
+                        <span aria-hidden="true" className="mr-1.5">•</span>
+                        {formatStatus(business.status)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {recentBusinesses.length === 0 && <p className="p-6 text-sm text-gray-500">{loading ? "Loading businesses..." : "No business records found."}</p>}
           </div>
 
         </div>
@@ -298,19 +307,36 @@ function Dashboard() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-white/10 bg-[#111111]" aria-labelledby="content-review-title">
+        <section className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-[#111111]" aria-labelledby="content-review-title">
           <div className="flex items-center justify-between border-b border-white/10 p-6">
-            <div><h2 id="content-review-title" className="text-lg font-semibold">Content review</h2><p className="mt-1 text-sm text-gray-500">{formatCount(dashboard.pendingContentCount)} awaiting review</p></div>
+            <div><h2 id="content-review-title" className="text-lg font-semibold">Content review</h2><p className="mt-1 text-sm text-gray-500">Latest submissions, newest first.</p></div>
             <button type="button" onClick={() => navigate("/content")} className="text-sm text-yellow-400 hover:text-yellow-300">Open</button>
           </div>
-          <div className="divide-y divide-white/5">
-            {dashboard.pendingContent.map((item) => (
-              <div key={item.id} className="px-6 py-4">
-                <p className="truncate text-sm font-medium text-gray-200">{item.title || "Untitled submission"}</p>
-                <p className="mt-1 text-xs text-gray-500">{relationName(item.business) || "Business"} · {formatDate(item.created_at)}</p>
-              </div>
-            ))}
-            {!loading && dashboard.pendingContent.length === 0 && <p className="p-6 text-sm text-gray-500">No content awaiting review.</p>}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] text-left text-sm">
+              <thead className="border-b border-white/10 text-xs uppercase tracking-wider text-gray-600">
+                <tr>
+                  <th scope="col" className="px-6 py-3 font-normal">Post</th>
+                  <th scope="col" className="px-3 py-3 font-normal">Business</th>
+                  <th scope="col" className="px-3 py-3 font-normal">Status</th>
+                  <th scope="col" className="py-3 pr-6 font-normal">Submitted</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {dashboard.recentContent.map((item) => (
+                  <tr key={item.id} className="transition hover:bg-white/[0.02]">
+                    <td className="px-6 py-4">
+                      <button type="button" onClick={() => navigate("/content")} className="text-left font-medium text-gray-200 hover:text-yellow-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400">{item.title || "Untitled submission"}</button>
+                      <p className="mt-1 text-xs text-gray-500">{item.type || "Content"}</p>
+                    </td>
+                    <td className="px-3 py-4 text-gray-300">{item.business_id ? relationName(item.business) || `Business (${item.business_id})` : "BuzzTap Admin"}</td>
+                    <td className="px-3 py-4"><span className="whitespace-nowrap rounded-full bg-white/5 px-2 py-1 text-xs text-gray-300">{String(item.status || "Unknown").replaceAll("_", " ")}</span></td>
+                    <td className="whitespace-nowrap py-4 pr-6 text-xs text-gray-500">{formatJoinedDate(item.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {dashboard.recentContent.length === 0 && <p className="p-6 text-sm text-gray-500">{loading ? "Loading submissions..." : loadErrors.includes("recentContent") ? "Submissions could not be loaded." : "No submissions found."}</p>}
           </div>
         </section>
 
