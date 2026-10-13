@@ -1,4 +1,5 @@
 import { useId } from "react"
+import BusinessAvatar from "./BusinessAvatar"
 
 const numberFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 })
 const countFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 })
@@ -107,7 +108,7 @@ function BusinessPartnerOverview({
             {businessError ? "Business records could not be loaded." : "Completed activity could not be loaded."} Refresh the page to try again.
           </OverviewMessage>
         ) : topLeaders.length === 0 ? (
-          <OverviewMessage title="No partner activity yet">
+          <OverviewMessage title="No ranked partner activity">
             {total === 0
               ? "Register business partners to start tracking their performance."
               : activeCount === 0
@@ -116,7 +117,7 @@ function BusinessPartnerOverview({
                   ? "Active partners need completed activity linked to customer accounts to appear in this period's customer ranking."
                   : metric === "volume"
                     ? "Active partners need completed customer activity with a positive BP amount to appear in this period's ranking."
-                    : "Active partners need completed customer activity to appear in this period's ranking."}
+                    : "Active partners need completed customer activity to appear in this period's ranking."} Missing records do not confirm zero activity.
           </OverviewMessage>
         ) : (
           <ol className="space-y-2 p-3 sm:p-4">
@@ -127,7 +128,6 @@ function BusinessPartnerOverview({
               const value = metric === "volume"
                 ? `${numberFormatter.format(business.metricValue)} BP`
                 : countFormatter.format(business.metricValue)
-              const initials = String(business.name || "Business").trim().charAt(0).toUpperCase()
 
               return (
                 <li key={business.id || `${business.name}-${index}`}>
@@ -139,7 +139,7 @@ function BusinessPartnerOverview({
                     className={`group grid w-full min-w-0 grid-cols-[1.5rem_2.25rem_minmax(0,1fr)] items-start gap-x-3 rounded-xl border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-400 disabled:cursor-default sm:p-4 ${rank === 1 ? "border-yellow-400/15 bg-yellow-400/[0.035] enabled:hover:border-yellow-400/35 enabled:hover:bg-yellow-400/[0.06]" : "border-transparent enabled:hover:border-white/10 enabled:hover:bg-white/[0.025]"}`}
                   >
                     <span className={`mt-2 text-center text-xs font-semibold tabular-nums ${rank === 1 ? "text-yellow-400" : "text-gray-500"}`} aria-label={`Rank ${rank}`}>{rank}</span>
-                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-semibold ${rank === 1 ? "bg-yellow-400/15 text-yellow-400" : "bg-white/5 text-gray-300"}`} aria-hidden="true">{initials}</span>
+                    <BusinessAvatar business={business} className="h-9 w-9 text-sm" />
                     <div className="min-w-0">
                       <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-1">
                         <div className="min-w-0 flex-1 basis-24">
@@ -168,7 +168,7 @@ function BusinessPartnerOverview({
 
         <div className="border-t border-white/5 px-5 py-3.5 text-[11px] leading-relaxed text-gray-500 sm:px-6">
           <p>Share is each partner's portion of all active partners' {metricLabel}. Bars compare partners with the leader.</p>
-          <p className="mt-1">BP volume excludes BP purchases and customer loads. Equal values share a rank.</p>
+          <p className="mt-1">BP volume measures activity, including completed refunds. It excludes BP purchases and customer loads. Equal values share a rank.</p>
         </div>
       </section>
 

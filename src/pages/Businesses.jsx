@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from "react"
 import Modal from "../components/Modal"
 import Toast from "../components/Toast"
 import BusinessPartnerOverview from "../components/BusinessPartnerOverview"
+import BusinessAvatar from "../components/BusinessAvatar"
+import BusinessInsightsPanel, { BusinessNetworkInsights } from "../components/BusinessInsightsPanel"
 import { buildBusinessPerformance, fetchAllRows } from "../lib/businessPerformance"
+import { businessReportingWindow, transactionsInWindow, buildSharedBusinessInsights, loadBusinessEnrichment, businessInsightMetric, REPORTING_TIMEZONE } from "../lib/businessInsights"
 import { supabase } from "../lib/supabaseClient"
 
 const statusStyles = {
@@ -41,6 +44,7 @@ const formatDisplayDate = (value) => {
     month: "short",
     day: "numeric",
     year: "numeric",
+    timeZone: REPORTING_TIMEZONE,
   }).format(date)
 }
 
@@ -80,7 +84,6 @@ function Businesses() {
   const [search, setSearch] = useState("")
   const [selectedBusiness, setSelectedBusiness] = useState(null)
   const [businessMembers, setBusinessMembers] = useState([])
-  const [wallets, setWallets] = useState([])
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState("")
   const [messageTitle, setMessageTitle] = useState("")
@@ -93,7 +96,8 @@ function Businesses() {
   const [metric, setMetric] = useState("volume")
   const [sort, setSort] = useState("rank")
   const [refreshKey, setRefreshKey] = useState(0)
-  const [performance, setPerformance] = useState({ period: "30", refreshKey: 0, rows: null, error: "" })
+  const [performance, setPerformance] = useState({ period: "30", refreshKey: 0, rows: null, window: null, error: "" })
+  const [enrichment, setEnrichment] = useState(null)
 
   useEffect(() => {
     let isMounted = true
@@ -134,26 +138,25 @@ function Businesses() {
 
   useEffect(() => {
     let active = true
-    const now = new Date()
-    const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const window = businessReportingWindow(period)
 
     async function loadPerformance() {
       try {
         const rows = await fetchAllRows(() => {
           let query = supabase.from("transactions")
             .select("id, business_id, customer_id, amount_bp, transaction_type, status, created_at, completed_at")
-            .eq("status", "COMPLETED")
+            .in("status", ["COMPLETED", "REFUNDED"])
             .not("business_id", "is", null)
-            .lte("created_at", now.toISOString())
+            .lt("created_at", window.end)
             .order("created_at", { ascending: true })
 
-          if (period === "30") query = query.gte("created_at", start.toISOString())
+          if (window.previousStart) query = query.gte("created_at", window.previousStart)
           return query
         }, () => !active)
 
-        if (active) setPerformance({ period, refreshKey, rows, error: "" })
+        if (active) setPerformance({ period, refreshKey, rows, window, error: "" })
       } catch (error) {
-        if (active) setPerformance({ period, refreshKey, rows: null, error: error.message || "Unable to load partner activity." })
+        if (active) setPerformance({ period, refreshKey, rows: null, window, error: error.message || "Unable to load partner activity." })
       }
     }
 
@@ -162,31 +165,34 @@ function Businesses() {
   }, [period, refreshKey])
 
   useEffect(() => {
+    if (!businesses.length || performance.period !== period || performance.refreshKey !== refreshKey || !performance.window) return undefined
+    let active = true
+    async function loadExtraData() {
+      const data = await loadBusinessEnrichment(supabase, businesses, performance.window, () => !active)
+      if (active) setEnrichment({ ...data, businesses, period, refreshKey })
+    }
+    loadExtraData()
+    return () => { active = false }
+  }, [businesses, performance, period, refreshKey])
+
+  useEffect(() => {
     if (!selectedBusiness?.id) return undefined
 
     let active = true
 
     async function loadBusinessDetails() {
-      const [membersResult, walletsResult] = await Promise.all([
-        supabase
+      const membersResult = await supabase
           .from("business_members")
           .select("id, user_id, role, status, created_at, profile:profiles(id, full_name, email, phone, status)")
           .eq("business_id", selectedBusiness.id)
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("buzzpoint_wallets")
-          .select("id, wallet_type, status, created_at")
-          .eq("business_id", selectedBusiness.id)
-          .order("created_at", { ascending: false }),
-      ])
+          .order("created_at", { ascending: true })
 
       if (!active) return
 
-      if (membersResult.error || walletsResult.error) {
-        setDetailError(membersResult.error?.message || walletsResult.error?.message || "Unable to load all business details.")
+      if (membersResult.error) {
+        setDetailError(membersResult.error.message || "Unable to load business members.")
       }
       setBusinessMembers(membersResult.data || [])
-      setWallets(walletsResult.data || [])
       setDetailLoading(false)
     }
 
@@ -205,13 +211,27 @@ function Businesses() {
   const performanceLoading = performance.period !== period || performance.refreshKey !== refreshKey || (performance.rows === null && !performance.error)
   const performanceError = performanceLoading ? "" : performance.error
   const performanceAvailable = !performanceLoading && !performanceError
+  const enrichmentLoading = businesses.length > 0 && (enrichment?.businesses !== businesses || enrichment?.period !== period || enrichment?.refreshKey !== refreshKey)
+  const availableEnrichment = enrichmentLoading ? {} : enrichment || {}
+  const enrichedBusinesses = useMemo(() => {
+      const profiles = enrichment?.businesses === businesses && enrichment?.period === period && enrichment?.refreshKey === refreshKey ? enrichment.profiles : {}
+      return businesses.map((business) => {
+        const profile = profiles?.[String(business.id)]
+        return { ...business, registeredName: business.name, name: profile?.displayName || business.name, type: profile?.type || business.type, location: profile?.address || business.location, logoUrl: profile?.logoUrl || null, publicProfile: profile || null }
+      })
+    }, [businesses, enrichment, period, refreshKey])
   const { partners, leaders } = useMemo(
-    () => buildBusinessPerformance(businesses, performance.rows || [], metric),
-    [businesses, performance.rows, metric],
+    () => {
+      const rows = performance.window ? transactionsInWindow(performance.rows || [], performance.window.start, performance.window.end) : []
+      return buildBusinessPerformance(enrichedBusinesses, rows, metric)
+    },
+    [enrichedBusinesses, performance, metric],
   )
+  const sharedInsights = useMemo(() => performance.window && !performanceLoading && !performanceError
+    ? buildSharedBusinessInsights(businesses, performance.rows || [], performance.window) : {}, [businesses, performance, performanceLoading, performanceError])
   const filteredBusinesses = partners.filter((business) => {
     const query = search.trim().toLowerCase()
-    return (filter === "All" || business.status === filter) && [business.name, business.location, business.type, business.owner].some((value) => value.toLowerCase().includes(query))
+    return (filter === "All" || business.status === filter) && [business.name, business.registeredName, business.location, business.type, business.owner].some((value) => value.toLowerCase().includes(query))
   }).sort((a, b) => {
     if (sort === "name") return a.name.localeCompare(b.name)
     if (sort === "rank" && performanceAvailable) {
@@ -226,11 +246,12 @@ function Businesses() {
     setDetailLoading(true)
     setDetailError("")
     setBusinessMembers([])
-    setWallets([])
     setMessageTitle("")
     setMessageBody("")
   }
   const selectedPerformance = partners.find((business) => business.id === selectedBusiness?.id)
+  const selectedProfile = availableEnrichment.profiles?.[String(selectedBusiness?.id)]
+  const activeOwners = businessMembers.filter((member) => String(member.status).toUpperCase() === "ACTIVE" && String(member.role).toUpperCase() === "OWNER")
   const sendBusinessMessage = async (event) => {
     event.preventDefault()
     if (!selectedBusiness?.id || !messageTitle.trim() || !messageBody.trim()) return
@@ -382,6 +403,8 @@ function Businesses() {
         filter={filter}
       />
 
+      {!loading && !supabaseError && <BusinessNetworkInsights businesses={enrichedBusinesses} insights={sharedInsights} enrichment={availableEnrichment} loading={performanceLoading || enrichmentLoading} />}
+
       <section aria-labelledby="business-directory-title" className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-[#111111]">
         <div className="border-b border-white/10 p-5 sm:p-6">
           <div className="mb-5 flex flex-wrap items-baseline justify-between gap-2">
@@ -426,7 +449,7 @@ function Businesses() {
                     {performanceAvailable && !business.rank && <span className="lg:sr-only">Unranked</span>}
                   </div>
                   <div className="flex min-w-0 items-center gap-3">
-                    <div aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-400/10 font-bold text-yellow-400">{business.name.charAt(0).toUpperCase()}</div>
+                    <BusinessAvatar business={business} />
                     <div className="min-w-0">
                       <button type="button" onClick={() => openBusiness(business)} className="max-w-full text-left font-medium text-white [overflow-wrap:anywhere] hover:text-yellow-400 focus-visible:outline-2 focus-visible:outline-yellow-400">{business.name}</button>
                       <p className="mt-1 text-xs text-gray-400 [overflow-wrap:anywhere]">{business.type} &middot; {business.location}</p>
@@ -435,20 +458,21 @@ function Businesses() {
                   </div>
                   <div>
                     <p className="mb-1 text-xs text-gray-400 lg:hidden">BP volume</p>
-                    <p className="text-sm font-medium tabular-nums text-yellow-300">{performanceAvailable ? `${formatNumber(business.volume)} BP` : performanceLoading ? "Loading..." : "Unavailable"}</p>
-                    {performanceAvailable && <p className="mt-1 text-xs text-gray-500">{business.lastActivity ? `Last activity ${formatDisplayDate(business.lastActivity)}` : "No completed activity"}</p>}
+                    <p className="text-sm font-medium tabular-nums text-yellow-300">{performanceAvailable && business.transactions > 0 ? `${formatNumber(business.volume)} BP` : performanceLoading ? "Loading..." : "Not reported"}</p>
+                    {performanceAvailable && <p className="mt-1 text-xs text-gray-500">{business.lastActivity ? `Last activity ${formatDisplayDate(business.lastActivity)}` : "No visible completed activity"}</p>}
+                    {!performanceLoading && <p className="mt-1 text-xs text-gray-400">Net sales: {businessInsightMetric("shared_net", business.id, sharedInsights, availableEnrichment).available ? `${formatNumber(businessInsightMetric("shared_net", business.id, sharedInsights, availableEnrichment).value)} BP` : "Not reported"}</p>}
                   </div>
                   <div>
                     <p className="mb-1 text-xs text-gray-400 lg:hidden">Customer activity</p>
-                    <p className="text-sm tabular-nums text-gray-300">{performanceAvailable ? `${formatNumber(business.transactions)} transactions` : performanceLoading ? "Loading..." : "Unavailable"}</p>
-                    {performanceAvailable && <p className="mt-1 text-xs tabular-nums text-gray-400">{formatNumber(business.customers)} unique customers</p>}
+                    <p className="text-sm tabular-nums text-gray-300">{performanceAvailable && business.transactions > 0 ? `${formatNumber(business.transactions)} transactions` : performanceLoading ? "Loading..." : "Not reported"}</p>
+                    {performanceAvailable && business.transactions > 0 && <p className="mt-1 text-xs tabular-nums text-gray-400">{formatNumber(business.customers)} identified customers</p>}
                   </div>
-                  <div><StatusBadge status={business.status} /></div>
+                  <div><StatusBadge status={business.status} /><p className="mt-2 text-xs text-gray-400">Shared wallet: {enrichmentLoading ? "Loading..." : businessInsightMetric("shared_bp_balance", business.id, sharedInsights, availableEnrichment).available ? `${formatNumber(businessInsightMetric("shared_bp_balance", business.id, sharedInsights, availableEnrichment).value)} BP` : "Not reported"}</p></div>
                 </div>
               ))}
             </div>
             {filteredBusinesses.length === 0 && <p className="px-6 py-12 text-center text-sm text-gray-400">{businesses.length ? "No businesses match your search or status filter." : "No businesses have joined yet."}</p>}
-            {filteredBusinesses.length > 0 && <p className="border-t border-white/5 px-6 py-3 text-xs text-gray-500">Ranks compare all active partners by {metricOptions.find((option) => option.value === metric).label.toLowerCase()}. {period === "30" ? "Activity recorded in the last 30 days." : "All-time activity."} Ties share a rank.</p>}
+            {filteredBusinesses.length > 0 && <p className="border-t border-white/5 px-6 py-3 text-xs text-gray-500">Ranks compare active partners by visible {metricOptions.find((option) => option.value === metric).label.toLowerCase()}. {period === "30" ? "Activity recorded in the last 30 days." : "All-time activity."} Ties share a rank. Missing records do not confirm zero activity.</p>}
           </>
         )}
       </section>
@@ -459,18 +483,22 @@ function Businesses() {
             <section>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-xl font-semibold">{selectedBusiness.name}</p>
+                  <div className="flex items-center gap-3"><BusinessAvatar business={selectedPerformance || selectedBusiness} className="h-12 w-12" /><p className="text-xl font-semibold [overflow-wrap:anywhere]">{selectedProfile?.displayName || selectedBusiness.name}</p></div>
                   <p className="mt-1 text-sm text-gray-500">{selectedBusiness.type} · Joined {selectedBusiness.joined}</p>
                 </div>
                 <StatusBadge status={selectedBusiness.status} />
               </div>
               <dl className="mt-4 grid gap-3 rounded-lg border border-white/10 bg-[#080808] p-4 sm:grid-cols-2">
-                <div><dt className="text-xs text-gray-500">Address</dt><dd className="mt-1 text-sm text-gray-200">{selectedBusiness.address || selectedBusiness.location || "Not provided"}</dd></div>
+                <div><dt className="text-xs text-gray-500">Address</dt><dd className="mt-1 text-sm text-gray-200">{selectedProfile?.address || selectedBusiness.address || selectedBusiness.location || "Not provided"}</dd></div>
                 <div><dt className="text-xs text-gray-500">Business type</dt><dd className="mt-1 text-sm text-gray-200">{selectedBusiness.type}</dd></div>
-                <div><dt className="text-xs text-gray-500">Email</dt><dd className="mt-1 break-all text-sm text-gray-200">{selectedBusiness.email || "Not provided"}</dd></div>
-                <div><dt className="text-xs text-gray-500">Phone</dt><dd className="mt-1 text-sm text-gray-200">{selectedBusiness.phone || "Not provided"}</dd></div>
+                <div><dt className="text-xs text-gray-500">Email</dt><dd className="mt-1 break-all text-sm text-gray-200">{selectedProfile?.email || selectedBusiness.email || "Not provided"}</dd></div>
+                <div><dt className="text-xs text-gray-500">Phone</dt><dd className="mt-1 text-sm text-gray-200">{selectedProfile?.phone || selectedBusiness.phone || "Not provided"}</dd></div>
+                <div><dt className="text-xs text-gray-500">Active owner memberships</dt><dd className="mt-1 text-sm text-gray-200">{detailLoading ? "Loading..." : activeOwners.map((member) => member.profile?.full_name || "Unnamed owner").join(", ") || "Not reported"}</dd></div>
+                <div><dt className="text-xs text-gray-500">Website</dt><dd className="mt-1 text-sm text-gray-200">{selectedProfile?.website ? <a href={selectedProfile.website} target="_blank" rel="noopener noreferrer" className="break-all text-yellow-300 hover:underline">{selectedProfile.website}</a> : "Not provided"}</dd></div>
                 <div><dt className="text-xs text-gray-500">Business ID</dt><dd className="mt-1 break-all font-mono text-xs text-gray-400">{selectedBusiness.id}</dd></div>
               </dl>
+              {selectedProfile?.about && <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-gray-300 [overflow-wrap:anywhere]">{selectedProfile.about}</p>}
+              <div className="mt-4"><p className="text-xs text-gray-400">Opening hours</p><p className="mt-1 whitespace-pre-line text-sm text-gray-200 [overflow-wrap:anywhere]">{selectedProfile?.openingHours || (enrichmentLoading ? "Loading public profile..." : "Not provided")}</p></div>
             </section>
 
             <section aria-label="Partner performance">
@@ -478,7 +506,7 @@ function Businesses() {
                 <h3 className="font-semibold">Partner performance</h3>
                 <span className="text-xs text-gray-400">{period === "30" ? "Last 30 days" : "All time"}{performanceAvailable && selectedPerformance?.rank ? ` · Rank #${selectedPerformance.rank} by ${metricOptions.find((option) => option.value === metric).label.toLowerCase()}` : ""}</span>
               </div>
-              {performanceAvailable && selectedPerformance ? (
+              {performanceAvailable && selectedPerformance && selectedPerformance.transactions > 0 ? (
                 <dl className="grid gap-3 sm:grid-cols-3">
                   {[
                     { label: "BP volume", value: `${formatNumber(selectedPerformance.volume)} BP` },
@@ -486,33 +514,18 @@ function Businesses() {
                     { label: "Unique customers", value: formatNumber(selectedPerformance.customers) },
                   ].map((item) => <div key={item.label} className="rounded-xl border border-white/10 bg-[#080808] p-4"><dt className="text-xs text-gray-400">{item.label}</dt><dd className="mt-2 text-lg font-semibold tabular-nums text-yellow-300">{item.value}</dd></div>)}
                 </dl>
-              ) : <p className="text-sm text-gray-400">{performanceLoading ? "Loading partner activity..." : "Partner activity is unavailable."}</p>}
+              ) : <p className="text-sm text-gray-400">{performanceLoading ? "Loading partner activity..." : "No completed activity could be confirmed from visible records."}</p>}
             </section>
 
-            {detailLoading && <p className="text-sm text-yellow-300">Loading members and BuzzPoints status...</p>}
+            <BusinessInsightsPanel business={selectedPerformance || selectedBusiness} insights={sharedInsights} enrichment={availableEnrichment} loading={performanceLoading || enrichmentLoading} period={period} />
+
+            {detailLoading && <p className="text-sm text-yellow-300">Loading business members...</p>}
             {detailError && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-300">Some details could not be loaded: {detailError}</p>}
 
             <section>
               <div className="mb-3 flex items-baseline justify-between gap-3">
-                <h3 className="font-semibold">BuzzPoints status</h3>
-                <span className="text-xs text-gray-500">{wallets.length} wallet records</span>
-              </div>
-              {wallets.length > 0 ? (
-                <div className="divide-y divide-white/5 rounded-lg border border-white/10 bg-[#080808]">
-                  {wallets.map((wallet) => (
-                    <div key={wallet.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-                      <div><p className="text-sm font-medium text-gray-200">{wallet.wallet_type || "Business wallet"}</p><p className="mt-1 text-xs text-gray-500">Created {formatDisplayDate(wallet.created_at)}</p></div>
-                      <span className="rounded-full bg-white/5 px-2.5 py-1 text-xs text-gray-300">{wallet.status || "Unknown status"}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : !detailLoading && <p className="rounded-lg border border-white/10 bg-[#080808] px-4 py-5 text-sm text-gray-500">No BuzzPoints wallet records found for this business.</p>}
-            </section>
-
-            <section>
-              <div className="mb-3 flex items-baseline justify-between gap-3">
                 <h3 className="font-semibold">Business members</h3>
-                <span className="text-xs text-gray-500">{businessMembers.length} members</span>
+                <span className="text-xs text-gray-500">{businessMembers.length ? `${businessMembers.length} visible members` : "Not reported"}</span>
               </div>
               {businessMembers.length > 0 ? (
                 <div className="overflow-x-auto rounded-lg border border-white/10">
@@ -529,7 +542,7 @@ function Businesses() {
                     </tbody>
                   </table>
                 </div>
-              ) : !detailLoading && <p className="rounded-lg border border-white/10 bg-[#080808] px-4 py-5 text-sm text-gray-500">No business members found.</p>}
+              ) : !detailLoading && <p className="rounded-lg border border-white/10 bg-[#080808] px-4 py-5 text-sm text-gray-500">No member records were returned. Complete staff coverage could not be confirmed.</p>}
             </section>
 
             <section className="border-t border-white/10 pt-5">
