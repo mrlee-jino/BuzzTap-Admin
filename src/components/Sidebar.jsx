@@ -12,14 +12,14 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
   const navigation = [
     { name: "Dashboard", path: "/" },
     { name: "Businesses", path: "/businesses" },
-    { name: "NFC Cards", path: "/nfc-cards" },
     { name: "Transactions", path: "/transactions" },
-    { name: "Users", path: "/users" },
     { name: "Reports", path: "/reports" },
-    { name: "System Logs", path: "/system-logs" },
-    { name: "BuzzPoint Treasury", path: "/treasury" },
+    { name: "Users", path: "/users" },
     { name: "Customers", path: "/customers" },
+    { name: "NFC Cards", path: "/nfc-cards" },
     { name: "Content Management", path: "/content" },
+    { name: "BuzzPoint Treasury", path: "/treasury" },
+    { name: "System Logs", path: "/system-logs" },
     { name: "Settings", path: "/settings" },
   ]
 
