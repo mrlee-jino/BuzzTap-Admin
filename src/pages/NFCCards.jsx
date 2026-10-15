@@ -8,6 +8,7 @@ import Toast from "../components/Toast"
 import { supabase } from "../lib/supabaseClient"
 
 const inputClass = "mt-2 w-full rounded-xl border border-white/10 bg-[#080808] px-3 py-2.5 text-sm text-white outline-none focus:border-yellow-400"
+const defaultExpiration = () => new Date(Date.now() + 30 * 86400000).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })
 
 const formatDate = (value) => {
   if (!value) return "Not available"
@@ -36,6 +37,8 @@ function NFCCards() {
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState("")
   const [assignOpen, setAssignOpen] = useState(false)
+  const [expirationDate, setExpirationDate] = useState(defaultExpiration)
+  const [deleting, setDeleting] = useState(false)
   const [assignForm, setAssignForm] = useState({ customerId: "", cardCode: "", cardUid: "", reason: "" })
   const [customerQuery, setCustomerQuery] = useState("")
   const [customerSuggestionsOpen, setCustomerSuggestionsOpen] = useState(false)
@@ -51,7 +54,7 @@ function NFCCards() {
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState(null)
 
-  const assignedCustomerIds = new Set(cards.map((card) => card.customer_id).filter(Boolean))
+  const assignedCustomerIds = new Set(cards.filter((card) => card.status !== "REPLACED").map((card) => card.customer_id).filter(Boolean))
   const availableCustomers = customers.filter((customer) => !assignedCustomerIds.has(customer.id))
   const normalizedCustomerQuery = customerQuery.trim().toLocaleLowerCase()
   const customerSuggestions = normalizedCustomerQuery
@@ -79,17 +82,11 @@ function NFCCards() {
     setActiveCustomerSuggestion(-1)
   }
 
-  const openAssignModal = async () => {
-    try {
-      const cardCodeResult = await supabase.rpc("admin_generate_nfc_card_code")
-
-      if (cardCodeResult.error) {
-        throw cardCodeResult.error
-      }
-
+  const openAssignModal = () => {
+      setExpirationDate(defaultExpiration())
       setAssignForm({
         customerId: "",
-        cardCode: cardCodeResult.data,
+        cardCode: "",
         cardUid: crypto.randomUUID(),
         reason: "",
       })
@@ -97,12 +94,6 @@ function NFCCards() {
       setCustomerSuggestionsOpen(false)
       setActiveCustomerSuggestion(-1)
       setAssignOpen(true)
-    } catch (error) {
-      setToast({
-        message: error.message || "Unable to generate an NFC card code.",
-        tone: "error",
-      })
-    }
   }
 
   const loadCustomers = async () => {
@@ -134,6 +125,7 @@ function NFCCards() {
             customer_id,
             status,
             issued_at,
+            expires_at,
             replaced_at,
             created_at,
             updated_at
@@ -170,7 +162,8 @@ function NFCCards() {
 
   useEffect(() => {
     const timer = window.setTimeout(fetchCards, 0)
-    return () => window.clearTimeout(timer)
+    const refreshTimer = window.setInterval(fetchCards, 60000)
+    return () => { window.clearTimeout(timer); window.clearInterval(refreshTimer) }
   // The loader is intentionally scheduled after mount to avoid a cascading render.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -181,7 +174,7 @@ function NFCCards() {
       .join(" ")
       .toLowerCase()
       .includes(query)
-    const matchesFilter = filter === "All" || card.status === filter
+    const matchesFilter = filter === "All" || (filter === "Unassigned" ? !card.customer_id : card.status === filter)
     return matchesSearch && matchesFilter
   })
 
@@ -326,11 +319,11 @@ function NFCCards() {
 
     const customerId = assignForm.customerId
     const cardCode = (assignForm.cardCode || "").trim()
-    const cardUid = (assignForm.cardUid || "").trim()
     const reason = (assignForm.reason || "").trim()
 
-    if (!customerId) {
-      setToast({ message: "Please select a customer.", tone: "error" })
+    if (saving) return
+    if (!customerId && customerQuery.trim()) {
+      setToast({ message: "Select a customer from the suggestions, or clear the customer field to save an unassigned card.", tone: "error" })
       return
     }
 
@@ -339,13 +332,18 @@ function NFCCards() {
       return
     }
 
+    if (!customerId && (!expirationDate || !(new Date(`${expirationDate}T23:59:59+08:00`).getTime() > Date.now()))) {
+      setToast({ message: "Choose a future expiration date for this unassigned card.", tone: "error" })
+      return
+    }
+
     setSaving(true)
 
     try {
-      const { error } = await supabase.rpc("admin_assign_nfc_card", {
-        p_customer_id: customerId,
+      const { error } = await supabase.rpc("admin_register_nfc_card", {
+        p_customer_id: customerId || null,
         p_card_code: cardCode,
-        p_card_uid: cardUid || crypto.randomUUID(),
+        p_expires_at: customerId ? null : new Date(`${expirationDate}T23:59:59+08:00`).toISOString(),
         p_reason: reason,
       })
 
@@ -356,10 +354,10 @@ function NFCCards() {
       setAssignOpen(false)
       setAssignForm({ customerId: "", cardCode: "", cardUid: "", reason: "" })
       await fetchCards()
-      setToast({ message: "NFC card assigned successfully.", tone: "success" })
+      setToast({ message: customerId ? "NFC card assigned successfully." : "NFC card registered without an owner. Ready for customer claiming.", tone: "success" })
     } catch (error) {
       setToast({
-        message: error.message || "Unable to assign NFC card.",
+        message: error.code === "23505" ? "This card code is already registered. Search for the existing card." : error.message || "Unable to assign NFC card.",
         tone: "error",
       })
     } finally {
@@ -368,6 +366,20 @@ function NFCCards() {
   }
 
   const statuses = ["ACTIVE", "LOST", "STOLEN", "BLOCKED", "REPLACED"]
+
+  const deleteUnassignedCard = async () => {
+    if (deleting) return
+    setDeleting(true)
+    try {
+      const { error } = await supabase.rpc("admin_delete_unassigned_nfc_card", { p_card_id: confirm.card.id, p_reason: confirm.reason.trim() || null })
+      if (error) throw error
+      setConfirm(null)
+      await fetchCards()
+      setToast({ message: "Unassigned NFC card deleted.", tone: "success" })
+    } catch (error) {
+      setToast({ message: error.message || "Unable to delete this card.", tone: "error" })
+    } finally { setDeleting(false) }
+  }
 
   return (
     <div className="space-y-8">
@@ -397,7 +409,7 @@ function NFCCards() {
           />
 
           <div className="flex flex-wrap gap-2">
-            {["All", ...statuses].map((item) => (
+            {["All", "Unassigned", ...statuses].map((item) => (
               <button
                 key={item}
                 type="button"
@@ -435,6 +447,7 @@ function NFCCards() {
                   <th>Status</th>
                   <th>Issued Date</th>
                   <th>Updated Date</th>
+                  <th>Expires</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -452,6 +465,7 @@ function NFCCards() {
                     </td>
                     <td className="text-gray-400">{formatDate(card.issued_at)}</td>
                     <td className="text-gray-400">{formatDate(card.updated_at || card.created_at)}</td>
+                    <td className="pr-4 text-gray-400">{card.customer_id ? "—" : <><p>{formatDate(card.expires_at)}</p>{card.expires_at && new Date(card.expires_at) <= new Date() && <p className="text-xs text-red-400">Expired · awaiting cleanup</p>}</>}</td>
                     <td className="flex flex-wrap gap-2 py-3">
                       {card.status === "ACTIVE" && (
                         <button
@@ -489,7 +503,7 @@ function NFCCards() {
                         </button>
                       )}
 
-                      {!['REPLACED'].includes(card.status) && ["ACTIVE", "BLOCKED", "LOST", "STOLEN"].includes(card.status) && (
+                      {card.customer_id && !['REPLACED'].includes(card.status) && ["ACTIVE", "BLOCKED", "LOST", "STOLEN"].includes(card.status) && (
                         <button
                           type="button"
                           onClick={() => {
@@ -503,7 +517,7 @@ function NFCCards() {
                         </button>
                       )}
 
-                      {card.status === "ACTIVE" && (
+                      {card.status === "ACTIVE" && card.customer_id && (
                         <button
                           type="button"
                           onClick={async () => {
@@ -530,7 +544,8 @@ function NFCCards() {
                         </button>
                       )}
 
-                      <button
+                      {!card.customer_id && <button type="button" className="mr-2 text-xs text-red-400" onClick={() => setConfirm({ card, action: "delete", title: "Delete unassigned NFC card?", description: `${card.card_code} will be permanently removed. Customers will no longer be able to claim it unless you register it again.`, label: "Delete Card", destructive: true, reason: "" })}>Delete</button>}
+                      {!card.customer_id && card.status === "ACTIVE" && <button
                         type="button"
                         onClick={() => {
                           setAssignForm({
@@ -547,7 +562,7 @@ function NFCCards() {
                         className="text-xs text-gray-400"
                       >
                         Assign
-                      </button>
+                      </button>}
                     </td>
                   </tr>
                 ))}
@@ -563,7 +578,7 @@ function NFCCards() {
         <Modal title="Assign NFC Card" onClose={() => setAssignOpen(false)}>
           <form onSubmit={handleAssign} className="space-y-5">
             <label className="block text-sm text-gray-300">
-              Customer
+              Customer (optional)
               <div className="relative">
                 <input
                   type="text"
@@ -592,7 +607,7 @@ function NFCCards() {
                     }
                   }}
                   className={inputClass}
-                  placeholder="Search unassigned customers..."
+                  placeholder="Leave blank for event cards, or search customers..."
                   role="combobox"
                   aria-autocomplete="list"
                   aria-expanded={customerSuggestionsOpen && Boolean(normalizedCustomerQuery)}
@@ -634,9 +649,14 @@ function NFCCards() {
                 type="text"
                 value={assignForm.cardCode}
                 className={inputClass}
-                readOnly
+                onChange={(event) => setAssignForm((current) => ({ ...current, cardCode: event.target.value }))}
+                onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur() } }}
+                placeholder="Scan or enter the physical card code"
+                autoFocus
+                autoComplete="off"
+                required
               />
-              <span className="mt-1 block text-xs text-gray-500">System-generated 16-digit BuzzTap card code.</span>
+              <span className="mt-1 block text-xs text-gray-500">Scan with your card reader. Leave Customer blank to register a card for customers to claim later.</span>
             </label>
 
             <div className="space-y-2 text-sm text-gray-300">
@@ -644,6 +664,12 @@ function NFCCards() {
               <CustomerAccountNumber customer={customers.find((customer) => customer.id === assignForm.customerId)} onAssigned={fetchCards} />
               <p className="text-xs text-gray-500">YYYY MMDD RRXX XXXX · Customer registration date, region, and regional sequence.</p>
             </div>
+
+            {!assignForm.customerId && <label className="block text-sm text-gray-300">
+              Expiration Date
+              <input type="date" value={expirationDate} onChange={(event) => setExpirationDate(event.target.value)} required className={inputClass} />
+              <span className="mt-1 block text-xs text-gray-500">Expires at the end of this date (UTC+8). Unclaimed cards are automatically deleted. Claimed cards keep their registration.</span>
+            </label>}
 
             <label className="block text-sm text-gray-300">
               Reason
@@ -669,7 +695,7 @@ function NFCCards() {
                 disabled={saving}
                 className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {saving ? "Assigning..." : "Assign Card"}
+                {saving ? "Saving..." : assignForm.customerId ? "Assign Card" : "Register Unassigned Card"}
               </button>
             </div>
           </form>
@@ -824,6 +850,7 @@ function NFCCards() {
           confirmLabel={confirm.label}
           destructive={confirm.destructive}
           onConfirm={async () => {
+            if (confirm.action === "delete") { await deleteUnassignedCard(); return }
             const reason = (confirm.reason || "").trim()
             await handleStatusChange(confirm.card, confirm.nextStatus, reason)
           }}
