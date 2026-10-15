@@ -13,6 +13,7 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
     { name: "Dashboard", path: "/" },
     { name: "Businesses", path: "/businesses" },
     { name: "Transactions", path: "/transactions" },
+    { name: "Payment Oversight", path: "/payments" },
     { name: "Reports", path: "/reports" },
     { name: "Users", path: "/users" },
     { name: "Customers", path: "/customers" },
@@ -256,6 +257,7 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
                   `}
                 >
                   {item.name === "Dashboard" && "▦"}
+                  {item.name === "Payment Oversight" && "✓"}
                   {item.name === "Businesses" && "▣"}
                   {item.name === "NFC Cards" && "▤"}
                   {item.name === "Transactions" && "▥"}

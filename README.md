@@ -21,7 +21,14 @@ Only use the Supabase publishable/anon key in this browser application. Never pu
 - `npm run lint`
 - `npm run build`
 
-The production bundle is written to `dist/`. The repository does not currently have an automated test suite.
+The production bundle is written to `dist/`. Run utility tests with `node --test src/lib/*.test.js`.
+
+## Payment support
+
+The **Payment Oversight** sidebar page provides approval evidence, dispute review,
+business points-payment controls, and activity monitoring. See
+[payment oversight](docs/payment-oversight.md) for the API contract, funding/refund
+audit, limitations, and rollout checks.
 
 ## Supabase Prerequisites
 

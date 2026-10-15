@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom"
 import { supabase } from "../lib/supabaseClient"
 
 const sources = [
+  { table: "customer_payment_disputes", fields: "id, state, created_at", statusColumn: "state", statuses: ["OPEN", "UNDER_REVIEW"], title: "Payment dispute needs review", path: "/payments?tab=disputes", describe: (row) => `Customer payment report: ${row.state.replaceAll("_", " ").toLowerCase()}. Open the dispute queue to investigate.` },
   { table: "purchase_requests", fields: "id, amount, created_at", statuses: ["PENDING", "SUBMITTED"], title: "BuzzPoints purchase request", path: "/treasury", describe: (row) => `${Number(row.amount || 0).toLocaleString()} BP requested. Review in Treasury.` },
   { table: "businesses", fields: "id, name, created_at", statuses: ["PENDING"], title: "Business awaiting review", path: "/businesses", describe: (row) => `${row.name || "A business"} is awaiting approval.` },
   { table: "transactions", fields: "id, transaction_code, created_at", statuses: ["FAILED"], title: "Failed transaction", path: "/transactions", describe: (row) => `${row.transaction_code || "A transaction"} failed. Review the transaction details.` },
@@ -31,7 +32,7 @@ export default function NotificationBell() {
         if (authError || !user) throw new Error("Session unavailable")
         const results = await Promise.all(sources.map(async (source) => {
           const { data, error } = await supabase.from(source.table).select(source.fields)
-            .in("status", source.statuses).order("created_at", { ascending: false }).limit(50)
+            .in(source.statusColumn || "status", source.statuses).order("created_at", { ascending: false }).limit(50)
           if (error) throw error
           return (data || []).map((row) => ({ id: `${source.table}:${row.id}`, title: source.title, description: source.describe(row), date: row.created_at, path: source.path }))
         }))

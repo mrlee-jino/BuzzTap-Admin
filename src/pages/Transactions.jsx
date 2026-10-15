@@ -3,7 +3,8 @@ import { supabase } from "../lib/supabaseClient"
 import Modal from "../components/Modal"
 import Toast from "../components/Toast"
 import DropdownMenu from "../components/DropdownMenu"
-import ConfirmModal from "../components/ConfirmModal"
+import { fetchAllRows } from "../lib/businessPerformance"
+import { Link, useSearchParams } from "react-router-dom"
 
 const normalizeTransactionStatus = (status) => {
   switch (String(status || "").toUpperCase()) {
@@ -43,15 +44,15 @@ const formatDateTime = (value) => {
 }
 
 function Transactions() {
+  const [searchParams] = useSearchParams()
   const [records, setRecords] = useState([])
-  const [search, setSearch] = useState("")
+  const [search, setSearch] = useState(() => searchParams.get("search") || "")
   const [statusFilter, setStatusFilter] = useState("All")
   const [methodFilter, setMethodFilter] = useState("All")
   const [directionFilter, setDirectionFilter] = useState("All")
   const [menuId, setMenuId] = useState(null)
   const [selected, setSelected] = useState(null)
   const [toast, setToast] = useState("")
-  const [refund, setRefund] = useState(null)
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState("")
 
@@ -60,7 +61,7 @@ function Transactions() {
     setFetchError("")
 
     try {
-      const { data, error } = await supabase
+      const data = await fetchAllRows(() => supabase
         .from("transactions")
         .select(`
           id,
@@ -72,6 +73,7 @@ function Transactions() {
           status,
           amount_bp,
           description,
+          metadata,
           created_at,
           updated_at,
           completed_at,
@@ -88,11 +90,7 @@ function Transactions() {
             card_code
           )
         `)
-        .order("created_at", { ascending: false })
-
-      if (error) {
-        throw error
-      }
+        .order("created_at", { ascending: false }))
 
       const normalizedTransactions = (data || []).map((transaction) => {
         const customerName = transaction.customer?.full_name || "Unknown Customer"
@@ -106,6 +104,8 @@ function Transactions() {
 
         return {
           id: transaction.transaction_code || transaction.id,
+          databaseId: transaction.id,
+          metadata: transaction.metadata || {},
           business: businessName,
           customer: customerName,
           card: cardCode,
@@ -189,6 +189,8 @@ function Transactions() {
       transaction.card,
       transaction.type,
       transaction.description,
+      transaction.databaseId,
+      JSON.stringify(transaction.metadata),
     ]
       .map((value) => String(value ?? ""))
       .join(" ")
@@ -518,7 +520,7 @@ function Transactions() {
                     <button onClick={() => setMenuId(menuId === transaction.id ? null : transaction.id)} className="text-gray-500 transition hover:text-yellow-400" aria-label={`Actions for ${transaction.id}`}>
                       ⋮
                     </button>
-                    {menuId === transaction.id && <DropdownMenu options={[{ label: "View Details", onClick: () => setSelected(transaction) }, { label: "Download Receipt", onClick: () => downloadReceipt(transaction) }, transaction.status === "Completed" ? { label: "Refund", onClick: () => setRefund(transaction), destructive: true } : null]} onSelect={(option) => { option.onClick(); setMenuId(null) }} />}
+                    {menuId === transaction.id && <DropdownMenu options={[{ label: "View Details", onClick: () => setSelected(transaction) }, { label: "Download Receipt", onClick: () => downloadReceipt(transaction) }]} onSelect={(option) => { option.onClick(); setMenuId(null) }} />}
 
                   </td>
 
@@ -549,6 +551,7 @@ function Transactions() {
         <Modal title="Transaction Details" onClose={() => setSelected(null)}>
           <div className="space-y-2 text-sm">
             <p><span className="text-gray-500">ID:</span> {selected.id}</p>
+            <p className="break-all"><span className="text-gray-500">Database UUID:</span> {selected.databaseId}</p>
             <p><span className="text-gray-500">Date:</span> {selected.date}</p>
             <p><span className="text-gray-500">Time:</span> {selected.time}</p>
             <p><span className="text-gray-500">Business:</span> {selected.business}</p>
@@ -559,25 +562,12 @@ function Transactions() {
             <p><span className="text-gray-500">Amount:</span> {selected.amount.toLocaleString()} BP</p>
             <p><span className="text-gray-500">Status:</span> {selected.status}</p>
             <p><span className="text-gray-500">Description:</span> {selected.description || "No description"}</p>
+            <details><summary className="cursor-pointer text-yellow-400">Linked payment metadata</summary><pre className="mt-2 whitespace-pre-wrap break-all text-xs text-gray-400">{JSON.stringify(selected.metadata, null, 2)}</pre></details>
           </div>
         </Modal>
       )}
 
-      {refund && (
-        <ConfirmModal
-          title="Refund transaction?"
-          description={`Refund ${refund.amount.toLocaleString()} BP for ${refund.id}?`}
-          confirmLabel="Refund"
-          destructive
-          onConfirm={() => {
-            // This will later be replaced by a secure refund RPC against Supabase.
-            setRecords((current) => current.map((item) => item.id === refund.id ? { ...item, status: "Refunded" } : item))
-            setToast("Transaction refunded successfully.")
-            setRefund(null)
-          }}
-          onClose={() => setRefund(null)}
-        />
-      )}
+      <p className="text-sm text-gray-500">Investigate approved payments and refund evidence in <Link className="text-yellow-400 underline" to="/payments">Payment Oversight</Link>. Merchant refunds require the verified business receipt flow.</p>
 
       {toast && <Toast message={toast} onClose={() => setToast("")} />}
     </div>

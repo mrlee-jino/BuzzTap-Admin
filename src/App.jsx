@@ -15,6 +15,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard"))
 const Businesses = lazy(() => import("./pages/Businesses"))
 const NFCCards = lazy(() => import("./pages/NFCCards"))
 const Transactions = lazy(() => import("./pages/Transactions"))
+const PaymentOversight = lazy(() => import("./pages/PaymentOversight"))
 const Users = lazy(() => import("./pages/Users"))
 const Reports = lazy(() => import("./pages/Reports"))
 const SystemLogs = lazy(() => import("./pages/SystemLogs"))
@@ -199,6 +200,7 @@ function AppLayout() {
             />
 
             <Route path="/treasury" element={<ProtectedRoute><BuzzPointTreasury /></ProtectedRoute>} />
+            <Route path="/payments" element={<ProtectedRoute><PaymentOversight key={location.search} /></ProtectedRoute>} />
             <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
             <Route path="/content" element={<ProtectedRoute><ContentManagement /></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
