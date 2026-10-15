@@ -1,5 +1,8 @@
 ﻿import { useEffect, useState } from "react"
 import Modal from "../components/Modal"
+import CustomerAccountNumber from "../components/CustomerAccountNumber"
+import { formatAccountNumber } from "../lib/accountNumber"
+import { useSearchParams } from "react-router-dom"
 import ConfirmModal from "../components/ConfirmModal"
 import Toast from "../components/Toast"
 import { supabase } from "../lib/supabaseClient"
@@ -25,10 +28,11 @@ const formatDate = (value) => {
 }
 
 function NFCCards() {
+  const [searchParams] = useSearchParams()
   const [cards, setCards] = useState([])
   const [customers, setCustomers] = useState([])
   const [filter, setFilter] = useState("All")
-  const [search, setSearch] = useState("")
+  const [search, setSearch] = useState(() => searchParams.get("search") || "")
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState("")
   const [assignOpen, setAssignOpen] = useState(false)
@@ -77,23 +81,16 @@ function NFCCards() {
 
   const openAssignModal = async () => {
     try {
-      const [cardCodeResult, cardUidResult] = await Promise.all([
-        supabase.rpc("admin_generate_nfc_card_code"),
-        supabase.rpc("admin_generate_nfc_card_uid"),
-      ])
+      const cardCodeResult = await supabase.rpc("admin_generate_nfc_card_code")
 
       if (cardCodeResult.error) {
         throw cardCodeResult.error
       }
 
-      if (cardUidResult.error) {
-        throw cardUidResult.error
-      }
-
       setAssignForm({
         customerId: "",
         cardCode: cardCodeResult.data,
-        cardUid: cardUidResult.data,
+        cardUid: crypto.randomUUID(),
         reason: "",
       })
       setCustomerQuery("")
@@ -111,7 +108,7 @@ function NFCCards() {
   const loadCustomers = async () => {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, full_name, role")
+      .select("id, full_name, role, account_number, account_region")
       .eq("role", "CUSTOMER")
 
     if (error) {
@@ -156,6 +153,7 @@ function NFCCards() {
 
         return {
           ...card,
+          account_number: customer?.account_number || null,
           customerName: fullName || "Unassigned",
         }
       })
@@ -179,7 +177,7 @@ function NFCCards() {
 
   const filtered = cards.filter((card) => {
     const query = search.toLowerCase()
-    const matchesSearch = [card.card_code, card.card_uid, card.customerName, card.status]
+    const matchesSearch = [card.card_code, card.account_number, formatAccountNumber(card.account_number), card.customerName, card.status]
       .join(" ")
       .toLowerCase()
       .includes(query)
@@ -218,16 +216,11 @@ function NFCCards() {
     }
 
     const cardCode = (replaceForm.cardCode || "").trim()
-    const cardUid = (replaceForm.cardUid || "").trim()
+    const cardUid = crypto.randomUUID()
     const reason = (replaceForm.reason || "").trim()
 
     if (!cardCode) {
       setToast({ message: "New Card Code is required.", tone: "error" })
-      return
-    }
-
-    if (!cardUid) {
-      setToast({ message: "New Card UID is required.", tone: "error" })
       return
     }
 
@@ -263,7 +256,7 @@ function NFCCards() {
   const loadTransferCustomers = async (currentCustomerId) => {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, full_name, role, status")
+      .select("id, full_name, role, status, account_number")
       .eq("role", "CUSTOMER")
       .in("status", ["PENDING", "ACTIVE", "SUSPENDED", "FROZEN"])
       .neq("id", currentCustomerId)
@@ -346,18 +339,13 @@ function NFCCards() {
       return
     }
 
-    if (!cardUid) {
-      setToast({ message: "Card UID is required.", tone: "error" })
-      return
-    }
-
     setSaving(true)
 
     try {
       const { error } = await supabase.rpc("admin_assign_nfc_card", {
         p_customer_id: customerId,
         p_card_code: cardCode,
-        p_card_uid: cardUid,
+        p_card_uid: cardUid || crypto.randomUUID(),
         p_reason: reason,
       })
 
@@ -370,21 +358,6 @@ function NFCCards() {
       await fetchCards()
       setToast({ message: "NFC card assigned successfully.", tone: "success" })
     } catch (error) {
-      const errorDetails = `${error.message || ""} ${error.details || ""} ${error.hint || ""}`.toLowerCase()
-
-      if (error.code === "23505" && errorDetails.includes("card_uid")) {
-        const { data: nextCardUid, error: uidError } = await supabase.rpc("admin_generate_nfc_card_uid")
-
-        if (!uidError && nextCardUid) {
-          setAssignForm((currentForm) => ({ ...currentForm, cardUid: nextCardUid }))
-          setToast({
-            message: "That UID was assigned to another card. A new UID is ready; submit again.",
-            tone: "error",
-          })
-          return
-        }
-      }
-
       setToast({
         message: error.message || "Unable to assign NFC card.",
         tone: "error",
@@ -419,7 +392,7 @@ function NFCCards() {
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search card code, UID, customer, or status..."
+            placeholder="Search card code, account number, customer, or status..."
             className="w-full rounded-xl border border-white/10 bg-[#080808] px-4 py-3 text-sm lg:max-w-md"
           />
 
@@ -457,7 +430,7 @@ function NFCCards() {
               <thead className="border-b border-white/10 text-xs uppercase tracking-wider text-gray-600">
                 <tr>
                   <th className="px-5 py-4">Card Code</th>
-                  <th>Card UID</th>
+                  <th>Account Number</th>
                   <th>Customer</th>
                   <th>Status</th>
                   <th>Issued Date</th>
@@ -470,7 +443,7 @@ function NFCCards() {
                 {filtered.map((card) => (
                   <tr key={card.id}>
                     <td className="px-5 py-4 font-mono text-white">{card.card_code}</td>
-                    <td className="font-mono text-gray-300">{card.card_uid}</td>
+                    <td className="py-3 pr-4 text-gray-300"><CustomerAccountNumber customer={customers.find((customer) => customer.id === card.customer_id)} onAssigned={fetchCards} /></td>
                     <td className="text-gray-200">{card.customerName}</td>
                     <td>
                       <span className="rounded-full bg-white/5 px-2 py-1 text-xs text-gray-300">
@@ -666,16 +639,11 @@ function NFCCards() {
               <span className="mt-1 block text-xs text-gray-500">System-generated 16-digit BuzzTap card code.</span>
             </label>
 
-            <label className="block text-sm text-gray-300">
-              Card UID
-              <input
-                type="text"
-                value={assignForm.cardUid}
-                className={inputClass}
-                readOnly
-              />
-              <span className="mt-1 block text-xs text-gray-500">Daily format: DDMM-YYYY-XXXX.</span>
-            </label>
+            <div className="space-y-2 text-sm text-gray-300">
+              <p>Account Number</p>
+              <CustomerAccountNumber customer={customers.find((customer) => customer.id === assignForm.customerId)} onAssigned={fetchCards} />
+              <p className="text-xs text-gray-500">YYYY MMDD RRXX XXXX · Customer registration date, region, and regional sequence.</p>
+            </div>
 
             <label className="block text-sm text-gray-300">
               Reason
@@ -716,7 +684,7 @@ function NFCCards() {
               <div className="mt-3 space-y-2">
                 <p><span className="text-gray-500">Customer:</span> {replaceCard.customerName}</p>
                 <p><span className="text-gray-500">Card Code:</span> {replaceCard.card_code}</p>
-                <p><span className="text-gray-500">Card UID:</span> {replaceCard.card_uid}</p>
+                <p><span className="text-gray-500">Account Number:</span> {formatAccountNumber(replaceCard.account_number)}</p>
                 <p><span className="text-gray-500">Status:</span> {replaceCard.status}</p>
               </div>
               <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-red-200">
@@ -737,17 +705,7 @@ function NFCCards() {
                 />
               </label>
 
-              <label className="block text-sm text-gray-300">
-                New Card UID
-                <input
-                  type="text"
-                  value={replaceForm.cardUid}
-                  onChange={(event) => setReplaceForm({ ...replaceForm, cardUid: event.target.value })}
-                  className={inputClass}
-                  placeholder="Enter new card UID"
-                  required
-                />
-              </label>
+              <p className="text-sm text-gray-400">The customer’s account number stays the same when replacing their card.</p>
 
               <label className="block text-sm text-gray-300">
                 Reason
@@ -792,7 +750,7 @@ function NFCCards() {
             <div className="rounded-xl border border-white/10 bg-[#0d0d0d] p-4 text-sm text-gray-300">
               <div className="space-y-2">
                 <p><span className="text-gray-500">Card Code:</span> {transferCard.card_code}</p>
-                <p><span className="text-gray-500">Card UID:</span> {transferCard.card_uid}</p>
+                <p><span className="text-gray-500">Account Number:</span> {formatAccountNumber(transferCard.account_number)}</p>
                 <p><span className="text-gray-500">Current Customer:</span> {transferCard.customerName}</p>
               </div>
             </div>

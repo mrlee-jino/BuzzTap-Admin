@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react"
 import Modal from "../components/Modal"
+import CustomerAccountNumber from "../components/CustomerAccountNumber"
+import { formatAccountNumber } from "../lib/accountNumber"
+import { Link } from "react-router-dom"
+import { fetchAllRows } from "../lib/businessPerformance"
 import ConfirmModal from "../components/ConfirmModal"
 import Toast from "../components/Toast"
 import { supabase } from "../lib/supabaseClient"
@@ -66,12 +70,13 @@ const normalizeCustomer = (profile) => {
 
   return {
     id: profile.id,
+    account_number: profile.account_number || null,
     firstName,
     lastName: lastNameParts.join(" "),
     name: fullName || "Unnamed Customer",
     email: "Not available yet",
     phone: profile.phone || "Not available",
-    cardId: "Not assigned",
+    cards: [],
     role: profile.role || "CUSTOMER",
     status: String(profile.status || "PENDING").toUpperCase(),
     createdAt: profile.created_at || null,
@@ -203,12 +208,13 @@ function Customers() {
     setFetchError("")
 
     try {
-      const [profilesResult, walletsResult] = await Promise.all([
+      const [profilesResult, walletsResult, cardRows] = await Promise.all([
         supabase
           .from("profiles")
           .select(`
             id,
             full_name,
+            account_number,
             phone,
             role,
             status,
@@ -218,6 +224,9 @@ function Customers() {
           .eq("role", "CUSTOMER")
           .order("created_at", { ascending: false }),
         supabase.from("customer_bp_wallets").select("customer_id, balance"),
+        fetchAllRows(() => supabase.from("nfc_cards")
+          .select("id, customer_id, card_code, card_uid, status, created_at")
+          .order("created_at", { ascending: false })),
       ])
 
       if (profilesResult.error) {
@@ -229,8 +238,16 @@ function Customers() {
       }
 
       const balanceByCustomer = new Map((walletsResult.data || []).map((wallet) => [wallet.customer_id, Number(wallet.balance || 0)]))
+      const cardsByCustomer = new Map()
+      for (const card of cardRows) {
+        if (!card.customer_id || card.status === "REPLACED") continue
+        const assigned = cardsByCustomer.get(card.customer_id) || []
+        assigned.push(card)
+        cardsByCustomer.set(card.customer_id, assigned)
+      }
       setCustomers((profilesResult.data || []).map((profile) => ({
         ...normalizeCustomer(profile),
+        cards: cardsByCustomer.get(profile.id) || [],
         balance: balanceByCustomer.get(profile.id) || 0,
       })))
     } catch (error) {
@@ -337,10 +354,10 @@ function Customers() {
   const filtered = customers.filter(
     (customer) =>
       (status === "All" || customer.status === status) &&
-      [customer.name, customer.email, customer.phone, customer.id, customer.cardId]
+      [customer.name, customer.email, customer.phone, customer.id, customer.account_number, formatAccountNumber(customer.account_number), ...customer.cards.map((card) => card.card_code)]
         .join(" ")
         .toLowerCase()
-        .includes(search.toLowerCase())
+        .includes(search.trim().toLowerCase())
   )
 
   const handleStatusUpdate = async (customer, nextLabel, reason) => {
@@ -475,7 +492,7 @@ function Customers() {
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search name, email, phone, customer ID, NFC card ID"
+            placeholder="Search name, email, phone, customer ID, account number, or scan NFC card code"
             className="flex-1 rounded-xl border border-white/10 bg-[#080808] px-4 py-3 text-sm outline-none focus:border-yellow-400"
           />
           <select
@@ -522,13 +539,21 @@ function Customers() {
                   <td className="px-5 py-4">
                     <p className="font-semibold">{customer.name}</p>
                     <p className="mt-1 font-mono text-xs text-gray-600">{customer.id}</p>
+                    <div className="mt-2 text-xs text-gray-400"><CustomerAccountNumber customer={customer} onAssigned={fetchCustomers} /></div>
                     <p className="mt-1 text-xs text-gray-600">Joined {customer.joined}</p>
                   </td>
                   <td className="text-gray-400">
                     <p>{customer.email}</p>
                     <p className="mt-1 text-xs text-gray-600">{customer.phone}</p>
                   </td>
-                  <td className="font-mono text-gray-400">{customer.cardId}</td>
+                  <td className="py-4 pr-5 text-gray-400">
+                    {customer.cards.length ? customer.cards.map((card) => (
+                      <div key={card.id} className="mb-2 last:mb-0">
+                        <Link to={`/nfc-cards?search=${encodeURIComponent(card.card_code)}`} className="font-mono text-yellow-400 hover:underline">{card.card_code}</Link>
+                        <p className="mt-1 text-xs text-gray-500">{card.status}</p>
+                      </div>
+                    )) : "Not assigned"}
+                  </td>
                   <td className="font-semibold text-yellow-400">{customer.balance.toLocaleString()} BP</td>
                   <td>
                     <span className="rounded-full bg-white/5 px-2 py-1 text-xs text-gray-300">
@@ -640,11 +665,17 @@ function Customers() {
                     <p className="mt-1 font-medium text-white">{profileView.name}</p>
                   </div>
                   <div>
-                    <p className="text-gray-500">NFC Card ID</p>
-                    <p className="mt-1 font-mono text-white">{profileView.cardId || "Not assigned"}</p>
+                    <p className="text-gray-500">NFC Card Code</p>
+                    {profileView.cards.length ? profileView.cards.map((card) => (
+                      <div key={card.id} className="mt-2">
+                        <Link to={`/nfc-cards?search=${encodeURIComponent(card.card_code)}`} className="font-mono text-yellow-400 hover:underline">{card.card_code}</Link>
+                        <p className="mt-1 text-xs text-gray-400">{card.status}</p>
+                      </div>
+                    )) : <p className="mt-1 text-white">Not assigned</p>}
                   </div>
                   <div>
                     <p className="text-gray-500">Account Status</p>
+                    <p className="mt-1 text-xs text-gray-400">Account Number: {formatAccountNumber(profileView.account_number)}</p>
                     <p className="mt-1 text-white">{profileView.status}</p>
                   </div>
                   <div>

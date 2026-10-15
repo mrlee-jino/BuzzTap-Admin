@@ -8,6 +8,7 @@ import {
 } from "react-router-dom"
 
 import Sidebar from "./components/Sidebar"
+import NotificationBell from "./components/NotificationBell"
 
 const Login = lazy(() => import("./pages/Login"))
 const Dashboard = lazy(() => import("./pages/Dashboard"))
@@ -138,6 +139,7 @@ function AppLayout() {
           }
         >
 
+          {!isLoginPage && <div className="mb-5 flex justify-end"><ProtectedRoute><NotificationBell /></ProtectedRoute></div>}
           <Suspense fallback={<div className="flex min-h-[50vh] items-center justify-center text-sm text-gray-400">Loading page...</div>}>
           <Routes>
             
